@@ -4,7 +4,7 @@ sudo vagrant ssh master -c "sudo dnf install -y python"
 master_ip=$(sudo vagrant ssh master -c "python -c 'import socket, sys; sys.stdout.write(socket.gethostbyname(socket.gethostname()))'")
 
 vagrant ssh master -c "
-sudo dnf install -y openvswitch-ovn-central &&
+sudo dnf install -y openvswitch-ovn-central openvswitch-ovn-host &&
 sudo systemctl enable ovn-northd &&
 sudo systemctl restart ovn-northd &&
 sudo ovn-sbctl set-connection ptcp:6642 &&
