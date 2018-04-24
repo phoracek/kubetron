@@ -7,7 +7,7 @@ sudo bash -c 'cat <<EOF > /etc/ovirt-provider-ovn/conf.d/kubernetes.conf
 [SSL]
 https-enabled=false
 [OVN REMOTE]
-ovn-remote=127.0.0.1:6641
+ovn-remote=tcp:127.0.0.1:6641
 [AUTH]
 auth-plugin=auth.plugins.static_token:NoAuthPlugin
 EOF' &&
