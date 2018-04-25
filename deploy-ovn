@@ -13,7 +13,7 @@ sudo ovn-nbctl set-connection ptcp:6641
 
 FAIL=0
 
-HOSTS=( node1 node2 )
+HOSTS=( node1 node2 master )
 for node in "${HOSTS[@]}"; do
     (
         sudo vagrant ssh $node -c "sudo dnf install -y python" &&
