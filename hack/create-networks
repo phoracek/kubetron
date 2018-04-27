@@ -1,0 +1,31 @@
+#!/bin/bash -xe
+
+vagrant ssh master -c "curl --data '{\"network\":{\"name\":\"red\"}}' http://localhost:9696/v2.0/networks"
+vagrant ssh master -c "curl --data '{
+    \"subnet\":
+        {
+
+            \"gateway_ip\": \"10.1.0.100\",
+            \"enable_dhcp\": true,
+            \"network_id\": \"red\",
+            \"cidr\": \"10.1.0.0/24\",
+            \"dns_nameservers\": [
+                \"8.8.8.8\"
+            ]
+        }
+}' http://localhost:9696/v2.0/subnets"
+
+vagrant ssh master -c "curl --data '{\"network\":{\"name\":\"blue\"}}' http://localhost:9696/v2.0/networks"
+vagrant ssh master -c "curl --data '{
+    \"subnet\":
+        {
+
+            \"gateway_ip\": \"10.2.0.100\",
+            \"enable_dhcp\": true,
+            \"network_id\": \"blue\",
+            \"cidr\": \"10.2.0.0/24\",
+            \"dns_nameservers\": [
+                \"8.8.8.8\"
+            ]
+        }
+}' http://localhost:9696/v2.0/subnets"

@@ -1,0 +1,22 @@
+#!/bin/bash -x
+
+KUBECTL=./hack/kubectl
+ADMISSION_IMAGE=${ADMISSION_IMAGE:-phoracek/kubetron-admission:latest}
+
+ADMISSION_CERT=$(cat server.crt | base64 -w 0)
+ADMISSION_KEY=$(cat server-key.pem | base64 -w 0)
+KUBERNETES_CA=$($KUBECTL get --namespace kube-public cm cluster-info -o yaml | grep certificate-authority-data | sed 's/.*certificate-authority-data: \(.*\)/\1/g')
+PROVIDER_URL=http://$($KUBECTL get node master -o json | jq '.status.addresses[0].address' | cut -d "\"" -f 2):9696
+
+# batch request is not done sequentialy and sometimes it fails with "namespace does not exist",
+# therefore, create it beforehand
+$KUBECTL create --save-config namespace kubetron
+sleep 2
+
+cat deploy/addon.yaml.in | \
+    sed "s#\$ADMISSION_IMAGE#$ADMISSION_IMAGE#g" | \
+    sed "s/\$ADMISSION_CERT/$ADMISSION_CERT/g" | \
+    sed "s/\$ADMISSION_KEY/$ADMISSION_KEY/g" | \
+    sed "s/\$KUBERNETES_CA/$KUBERNETES_CA/g" | \
+    sed "s#\$PROVIDER_URL#$PROVIDER_URL#g" | \
+    $KUBECTL apply -f -

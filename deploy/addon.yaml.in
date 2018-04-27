@@ -1,0 +1,247 @@
+# TODO: add documentation for all objects
+# TODO: list configurable parameters
+apiVersion: v1
+kind: List
+items:
+
+# TODO: check if we need this
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: kubetron
+    namespace: kubetron
+
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: kubetron:system:api-server-auth
+  rules:
+    - apiGroups:
+        - "kubetron.network.kubevirt.io"
+      resources:
+        - admission
+      verbs:
+        - create
+
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: kubetron:system:api-server-auth
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: kubetron:system:api-server-auth
+  # TODO: this does not look right, check if we can change it
+  subjects:
+  - kind: Group
+    name: system:authenticated
+    apiGroup: rbac.authorization.k8s.io
+  - kind: Group
+    name: system:unauthenticated
+    apiGroup: rbac.authorization.k8s.io
+
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: kubetron:system:pod-reader
+  rules:
+    - apiGroups:
+        - ""
+      resources:
+        - pods
+      verbs:
+        - get
+
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: kubetron:system:pod-reader
+  roleRef:
+    apiGroup: ""
+    kind: ClusterRole
+    name: kubetron:system:pod-reader
+  subjects:
+  - kind: ServiceAccount
+    name: kubetron
+    namespace: kubetron
+
+# TODO: check if we need this
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    name: kubetron:system:extension-apiserver-authentication-reader
+    namespace: kube-system
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: Role
+    name: extension-apiserver-authentication-reader
+  subjects:
+  - kind: ServiceAccount
+    name: kubetron
+    namespace: kubetron
+
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: kubetron:system:auth-delegator
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: system:auth-delegator
+  subjects:
+  - kind: ServiceAccount
+    name: kubetron
+    namespace: kubetron
+
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: kubetron
+    labels:
+      kubetron.network.kubevirt.io/ignoreAdmission: "true"
+
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: admission-audit-config
+    namespace: kubetron
+  data:
+    audit.yaml: |
+      apiVersion: audit.k8s.io/v1beta1
+      kind: Policy
+      rules:
+      - level: Metadata
+
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: config
+    namespace: kubetron
+  data:
+    providerURL: $PROVIDER_URL
+    resourceName: kubetron.network.kubevirt.io/overlay
+
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: admission-certs
+    namespace: kubetron
+  type: Opaque
+  data:
+    cert.pem: $ADMISSION_CERT
+    key.pem: $ADMISSION_KEY
+
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: admission
+    namespace: kubetron
+    labels:
+      app: admission
+  spec:
+    ports:
+    - name: https-webhook
+      port: 443
+    selector:
+      app: admission
+
+- apiVersion: apps/v1
+  kind: DaemonSet
+  metadata:
+    name: admission
+    namespace: kubetron
+    labels:
+      app: admission
+  spec:
+    selector:
+      matchLabels:
+        app: admission
+    updateStrategy:
+      type: RollingUpdate
+    template:
+      metadata:
+        name: admission
+        labels:
+          app: admission
+      spec:
+        serviceAccountName: kubetron
+        containers:
+          - name: admission
+            image: $ADMISSION_IMAGE
+            imagePullPolicy: Always
+            args:
+              - --tls-cert-file=/etc/certs/cert.pem
+              - --tls-private-key-file=/etc/certs/key.pem
+              - --provider-url=$(PROVIDER_URL)
+              - --resource-name=$(RESOURCE_NAME)
+              - --audit-log-path=-
+              - --audit-policy-file=/etc/config/audit.yaml
+              - --v=6
+            livenessProbe:
+              httpGet:
+                scheme: HTTPS
+                path: /healthz
+                port: 443
+              initialDelaySeconds: 10
+            readinessProbe:
+              httpGet:
+                scheme: HTTPS
+                path: /healthz
+                port: 443
+              initialDelaySeconds: 10
+            env:
+            - name: PROVIDER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: config
+                  key: providerURL
+            - name: RESOURCE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: config
+                  key: resourceName
+            volumeMounts:
+            - name: certs
+              mountPath: /etc/certs
+              readOnly: true
+            - name: audit-config
+              mountPath: /etc/config
+              readOnly: true
+        volumes:
+        - name: certs
+          secret:
+            secretName: admission-certs
+        - name: audit-config
+          configMap:
+            name: admission-audit-config
+        tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        # TODO: this should be based on actual role, not hostname
+        nodeSelector:
+          "kubernetes.io/hostname": "master"
+
+- apiVersion: admissionregistration.k8s.io/v1beta1
+  kind: MutatingWebhookConfiguration
+  metadata:
+    name: kubetron
+  webhooks:
+    - name: kubetron.network.kubevirt.io
+      clientConfig:
+        service:
+          name: admission
+          namespace: kubetron
+          path: /apis/kubetron.network.kubevirt.io/v1alpha1/admission
+        caBundle: $KUBERNETES_CA
+      rules:
+        - operations: ["CREATE", "DELETE"]
+          apiGroups: ["*"]
+          apiVersions: ["*"]
+          resources:
+            - pods
+      failurePolicy: Fail
+      namespaceSelector:
+        matchExpressions:
+        - key: kubetron.network.kubevirt.io/ignoreAdmission
+          operator: DoesNotExist

@@ -1,8 +1,5 @@
 #!/bin/bash -e
 
-# https://kubernetes.io/docs/setup/independent/install-kubeadm/
-# https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/
-
 NODES=( master node1 node2 )
 
 FAIL=0
