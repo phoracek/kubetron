@@ -1,6 +1,7 @@
 // TODO: improve logging
 // TODO: add documentation
 // TODO: cleanup and refactoring
+// TODO: expose env vars with KUBETRON_NETWORK_NAME="interface_name" to containers
 package admission
 
 import (
@@ -12,6 +13,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/mattbaird/jsonpatch"
+	"github.com/phoracek/kubetron/pkg/spec"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -112,9 +114,9 @@ func (ah *AdmissionHook) admitCreate(req *admissionv1beta1.AdmissionRequest) *ad
 
 	initializedPod := pod.DeepCopy()
 
-	// TODO: use struct instead of map, use networkspec type
+	// TODO: use struct instead of map, use networksspec type
 	// TODO: cleanup if fails
-	networksSpec := make(map[string]NetworkSpec)
+	networksSpec := make(map[string]spec.NetworkSpec)
 	for _, network := range networks {
 		macAddress := generateRandomMac()
 		portName := generatePortName(network)
@@ -123,7 +125,7 @@ func (ah *AdmissionHook) admitCreate(req *admissionv1beta1.AdmissionRequest) *ad
 			return errorResponse(resp, "Error creating port: %v", err)
 		}
 
-		networksSpec[network] = NetworkSpec{
+		networksSpec[network] = spec.NetworkSpec{
 			MacAddress: macAddress,
 			PortName:   portName,
 			PortID:     portID,
@@ -193,7 +195,7 @@ func (ah *AdmissionHook) admitDelete(req *admissionv1beta1.AdmissionRequest) *ad
 		return resp
 	}
 
-	networksSpec := NetworksSpec{}
+	networksSpec := spec.NetworksSpec{}
 	err = json.Unmarshal([]byte(networksSpecAnnotation), &networksSpec)
 	if err != nil {
 		return errorResponse(resp, "Failed to read networksSpec: %v", err)

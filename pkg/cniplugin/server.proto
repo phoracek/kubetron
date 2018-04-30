@@ -1,0 +1,14 @@
+package cniplugin;
+
+service Plugin {
+  rpc AddNetwork(PluginParams) returns (PluginResult) {}
+  rpc DelNetwork(PluginParams) returns (PluginResult) {}
+}
+
+message PluginParams {
+  required string containerName = 1;
+}
+
+message PluginResult {
+  optional string msg = 2;
+}

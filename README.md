@@ -103,6 +103,9 @@ CGO_ENABLED=0 GOOS=linux go build cmd/admission/main.go
 # build and push admission image
 docker build -f cmd/admission/Dockerfile -t phoracek/kubetron-admission:latest .
 docker push phoracek/kubetron-admission:latest
+
+# generate server proto buffer
+protoc --go_out=plugins=grpc:. pkg/cniplugin/server.proto
 ```
 
 ## TODO
