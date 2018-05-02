@@ -18,9 +18,10 @@ func NewProviderClient(url string) *providerClient {
 	return &providerClient{client}
 }
 
-func (c *providerClient) ListNetworkNames() (map[string]bool, error) {
+func (c *providerClient) ListNetworkIDsByNames() (map[string]string, error) {
 	var result map[string][]map[string]interface{}
 
+	// TODO: get id
 	// TODO: check provider error output
 	_, err := c.client.R().
 		SetResult(&result).
@@ -29,16 +30,16 @@ func (c *providerClient) ListNetworkNames() (map[string]bool, error) {
 		return nil, err
 	}
 
-	networkNames := make(map[string]bool)
+	networkIDsByNames := make(map[string]string)
 	for _, network := range result["networks"] {
-		networkNames[network["name"].(string)] = true
+		networkIDsByNames[network["name"].(string)] = network["id"].(string)
 	}
 
-	return networkNames, nil
+	return networkIDsByNames, nil
 }
 
 // TODO: return port id
-func (c *providerClient) CreateNetworkPort(network, port, macAddress string) (string, error) {
+func (c *providerClient) CreateNetworkPort(network, port, macAddress string) (string, bool, error) {
 	var result map[string]map[string]interface{}
 
 	// TODO: check provider error output
@@ -57,8 +58,9 @@ func (c *providerClient) CreateNetworkPort(network, port, macAddress string) (st
 		Post("v2.0/ports")
 
 	portID := result["port"]["id"].(string)
+	hasFixedIPs := len(result["port"]["fixed_ips"].([]interface{})) != 0
 
-	return portID, err
+	return portID, hasFixedIPs, err
 }
 
 func (c *providerClient) DeleteNetworkPort(portID string) error {

@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: List
+items:
+- kind: Pod
+  apiVersion: v1
+  metadata:
+    name: example-kubetron-pod1
+    annotations:
+      kubetron.network.kubevirt.io/networks: red, blue
+  spec:
+    containers:
+      - name: example-container
+        image: alpine
+        command: ["sleep", "9999"]
+    restartPolicy: Never
+    nodeSelector:
+      "kubernetes.io/hostname": "node1"
+- kind: Pod
+  apiVersion: v1
+  metadata:
+    name: example-kubetron-pod2
+    annotations:
+      kubetron.network.kubevirt.io/networks: red, blue
+  spec:
+    containers:
+      - name: example-container
+        image: alpine
+        command: ["sleep", "9999"]
+    restartPolicy: Never
+    nodeSelector:
+      "kubernetes.io/hostname": "node2"

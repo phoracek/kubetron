@@ -1,0 +1,16 @@
+#!/bin/bash -xe
+
+for interface in "$@"; do
+    until ip link show $interface; do sleep 0.1; done
+done
+
+echo Waiting for all interfaces to appear
+
+for job in $(jobs -p); do
+    echo Waiting for $job to finish
+    wait $job || echo $job failed
+done
+
+dhclient -e DEFROUTE=no "$@"
+
+sleep infinity

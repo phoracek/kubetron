@@ -12,6 +12,22 @@ PRs and issues are welcome.
 
 ## Development environment usage
 
+Install development environment dependencies.
+
+```shell
+# install vagrant (and configure different hypervisor if needed)
+dnf install vagrant
+
+# install kubectl
+dnf install kubernetes-client
+
+# install cfssl and cfssljson
+curl https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 -O /bin/cfssl
+chmod +x /bin/cfssl
+curl https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 -O /bin/cfssljson
+chmod +x /bin/cfssljson
+```
+
 Development environment provides multi-node setup of Kubernetes and
 ovirt-ovn-provider (minimal implementation of Neutron).
 
@@ -35,12 +51,12 @@ vagrant ssh master -c 'sudo ovn-sbctl show'
 ./hack/deploy-ovn-provider
 
 # check that ovn provider works
-vagrant ssh master -c 'curl 127.0.0.1:9696/v2.0/networks'
+vagrant ssh master -c 'curl 127.0.0.1:9696/v2.0/networks' | jq
 
 # verify ovirt-provider-ovn
 ./hack/verify-ovn-provider
 
-# remove all machines
+# remove all machines (don't if you want to go through the next step)
 vagrant destroy
 ```
 
@@ -53,37 +69,46 @@ environment.
 # install plugin
 ./hack/install-addon
 
-# or install with custom admission image
-ADMISSION_IMAGE=user/image:version ./hack/install-addon
-
-# in case admission image was changed, remove it and reinstall plugin
-# (no need to call this if no changes were made since install)
-./hack/kubectl delete ds admission --namespace kubetron
-./hack/reinstall-addon
-
-# check if admission is running and ready
+# check if admission and deviceplugins are running and ready
 ./hack/kubectl get ds --namespace kubetron
 
-# create two networks on neutron, red and blue
+# create two networks on neutron, red and blue, both of them have a subnet assigned
 ./hack/create-networks
 
-# create a pod requesting networks red and blue
-./hack/kubectl create -f deploy/example-kubetron-pod.yaml
+# create two pods requesting networks red and blue
+./hack/kubectl create -f deploy/example-kubetron-pods.yaml
 
 # verify that networksSpec annotation was added
-./hack/kubectl get pod example-kubetron-pod -o json | jq '.metadata.annotations'
+./hack/kubectl get pod example-kubetron-pod1 -o json | jq '.metadata.annotations'
+./hack/kubectl get pod example-kubetron-pod2 -o json | jq '.metadata.annotations'
 
 # verify that sidecar requesting resource was added
-./hack/kubectl get pod example-kubetron-pod -o json | jq '.spec.containers'
+./hack/kubectl get pod example-kubetron-pod1 -o json | jq '.spec.containers[] | select(.name=="kubetron-request-sidecart")'
+./hack/kubectl get pod example-kubetron-pod2 -o json | jq '.spec.containers[] | select(.name=="kubetron-request-sidecart")'
+
+# verify that ports to all networks with a subnet are passed as arguments to sidecar
+./hack/kubectl get pod example-kubetron-pod1 -o json | jq '.spec.containers[] | select(.name=="kubetron-request-sidecart") | .args'
+./hack/kubectl get pod example-kubetron-pod2 -o json | jq '.spec.containers[] | select(.name=="kubetron-request-sidecart") | .args'
 
 # verify that network ports were added
-vagrant ssh master -c "curl http://localhost:9696/v2.0/ports"
+vagrant ssh master -c "curl http://localhost:9696/v2.0/ports" | jq
 
-# remove the pod
-./hack/kubectl delete pod example-kubetron-pod
+# check if pods are running and ready
+./hack/kubectl get pod example-kubetron-pod1
+./hack/kubectl get pod example-kubetron-pod2
+
+# verify that pods obtained IP addresses from OVN DHCP server
+./hack/kubectl exec -ti example-kubetron-pod1 -c example-container ip address
+./hack/kubectl exec -ti example-kubetron-pod2 -c example-container ip address
+
+# try to ping from one pod to another
+./hack/kubectl exec -ti example-kubetron-pod1 -c example-container ping $BLUE_OR_RED_POD2_ADDRESS
+
+# remove pods
+./hack/kubectl delete -f deploy/example-kubetron-pods.yaml
 
 # verify that network ports were removed
-vagrant ssh master -c "curl http://localhost:9696/v2.0/ports"
+vagrant ssh master -c "curl http://localhost:9696/v2.0/ports" | jq
 ```
 
 ## Development
@@ -97,20 +122,31 @@ dep ensure
 # don't refresh, just download dependencies
 dep ensure --vendor-only
 
-# build admission locally
+# build admission binary locally
 CGO_ENABLED=0 GOOS=linux go build cmd/admission/main.go
+
+# build deviceplugin binary locally
+CGO_ENABLED=0 GOOS=linux go build cmd/deviceplugin/main.go
 
 # build and push admission image
 docker build -f cmd/admission/Dockerfile -t phoracek/kubetron-admission:latest .
 docker push phoracek/kubetron-admission:latest
 
-# generate server proto buffer
-protoc --go_out=plugins=grpc:. pkg/cniplugin/server.proto
+# build and push deviceplugin image
+docker build -f cmd/deviceplugin/Dockerfile -t phoracek/kubetron-deviceplugin:latest .
+docker push phoracek/kubetron-deviceplugin:latest
+
+# build and push sidecar image
+docker build -f cmd/sidecar/Dockerfile -t phoracek/kubetron-sidecar:latest .
+docker push phoracek/kubetron-sidecar:latest
 ```
 
 ## TODO
 
-- Device plugin was not implemented yet, that means it does not fully work yet.
 - Design deck
 - Currenty communicates with Neutron API in plaintext without any auth.
   Provide security configuration.
+- If possible, communicate with OVN NB, not Neutron (or support both).
+- Make images smaller.
+- Limit security only to needed.
+- Add readiness check to sidecar.

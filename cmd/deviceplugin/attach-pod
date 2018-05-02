@@ -1,0 +1,28 @@
+#!/usr/bin/bash -ex
+
+exec > >(tee -ia /var/log/attach-pod.log)
+exec 2> >(tee -ia /var/log/attach-pod.err.out)
+
+CONTAINERNAME=$1
+PORTNAME=$2
+PORTID=$3
+MAC=$4
+PID=$5
+
+ovs-vsctl -- \
+    add-port br-int $PORTNAME -- \
+    set Interface $PORTNAME type=internal -- \
+    set Interface $PORTNAME external_ids:iface-id=$PORTID
+
+sleep 1
+
+rm -f /var/run/netns/$CONTAINERNAME
+
+# initialized /var/run/netns in case it does not exist yet
+ls /var/run/netns || ip netns add dummyNS || true
+ln -s /host/proc/$PID/ns/net /var/run/netns/$CONTAINERNAME
+ip link set dev $PORTNAME netns $CONTAINERNAME
+ip netns exec $CONTAINERNAME ip link set $PORTNAME address $MAC
+ip netns exec $CONTAINERNAME ip link set $PORTNAME up
+
+# TODO: call dhcp ipam via cni

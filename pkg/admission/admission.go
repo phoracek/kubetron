@@ -102,27 +102,34 @@ func (ah *AdmissionHook) admitCreate(req *admissionv1beta1.AdmissionRequest) *ad
 
 	glog.V(6).Infof("Input for %s: %s", requestName, string(req.Object.Raw))
 
-	providerNetworks, err := ah.providerClient.ListNetworkNames()
+	providerNetworkIDsByNames, err := ah.providerClient.ListNetworkIDsByNames()
 	if err != nil {
 		return errorResponse(resp, "Failed to list provider networks: %v", err)
 	}
 	for _, network := range networks {
-		if _, ok := providerNetworks[network]; !ok {
+		if _, ok := providerNetworkIDsByNames[network]; !ok {
 			return errorResponse(resp, "Network %s was not found", network)
 		}
 	}
 
 	initializedPod := pod.DeepCopy()
 
-	// TODO: use struct instead of map, use networksspec type
+	// TODO: only first one was checked
+	dhclientInterfaces := make([]string, 0)
+
+	// TODO: use struct instead of map, use networkspec type
 	// TODO: cleanup if fails
 	networksSpec := make(map[string]spec.NetworkSpec)
 	for _, network := range networks {
 		macAddress := generateRandomMac()
 		portName := generatePortName(network)
-		portID, err := ah.providerClient.CreateNetworkPort(network, portName, macAddress)
+		portID, hasFixedIPs, err := ah.providerClient.CreateNetworkPort(providerNetworkIDsByNames[network], portName, macAddress)
 		if err != nil {
 			return errorResponse(resp, "Error creating port: %v", err)
+		}
+
+		if hasFixedIPs {
+			dhclientInterfaces = append(dhclientInterfaces, portName)
 		}
 
 		networksSpec[network] = spec.NetworkSpec{
@@ -137,14 +144,19 @@ func (ah *AdmissionHook) admitCreate(req *admissionv1beta1.AdmissionRequest) *ad
 	}
 	initializedPod.ObjectMeta.Annotations[networksSpecAnnotationName] = string(networksSpecJSON)
 
+	// TODO: configure readiness on sidecar
 	resourceContainer := v1.Container{
 		Name:  "kubetron-request-sidecart",
-		Image: "scratch",
+		Image: "phoracek/kubetron-sidecar",
 		Resources: v1.ResourceRequirements{
 			Limits: v1.ResourceList{
 				v1.ResourceName(ah.ResourceName): resource.MustParse("1"),
 			},
 		},
+		SecurityContext: &v1.SecurityContext{
+			Privileged: newTrue(),
+		},
+		Args: dhclientInterfaces,
 	}
 	initializedPod.Spec.Containers = append(pod.Spec.Containers, resourceContainer)
 
@@ -267,7 +279,7 @@ func generateRandomMac() string {
 
 func generatePortName(networkName string) string {
 	prefixLen := min(len(networkName), 8)
-	suffixLen := 14 - prefixLen
+	suffixLen := 13 - prefixLen
 	suffix := make([]byte, suffixLen)
 	for i := range suffix {
 		suffix[i] = letters[rand.Intn(len(letters))]
@@ -280,4 +292,9 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func newTrue() *bool {
+	b := true
+	return &b
 }
