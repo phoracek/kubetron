@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/mattbaird/jsonpatch"
+	"github.com/phoracek/kubetron/pkg/spec"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -114,7 +115,7 @@ func (ah *AdmissionHook) admitCreate(req *admissionv1beta1.AdmissionRequest) *ad
 
 	// TODO: use struct instead of map, use networkspec type
 	// TODO: cleanup if fails
-	networksSpec := make(map[string]NetworkSpec)
+	networksSpec := make(map[string]spec.NetworkSpec)
 	for _, network := range networks {
 		macAddress := generateRandomMac()
 		portName := generatePortName(network)
@@ -123,7 +124,7 @@ func (ah *AdmissionHook) admitCreate(req *admissionv1beta1.AdmissionRequest) *ad
 			return errorResponse(resp, "Error creating port: %v", err)
 		}
 
-		networksSpec[network] = NetworkSpec{
+		networksSpec[network] = spec.NetworkSpec{
 			MacAddress: macAddress,
 			PortName:   portName,
 			PortID:     portID,

@@ -1,4 +1,4 @@
-package admission
+package spec
 
 type NetworksSpec map[string]NetworkSpec
 
