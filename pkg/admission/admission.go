@@ -194,7 +194,7 @@ func (ah *AdmissionHook) admitDelete(req *admissionv1beta1.AdmissionRequest) *ad
 		return resp
 	}
 
-	networksSpec := NetworksSpec{}
+	networksSpec := spec.NetworksSpec{}
 	err = json.Unmarshal([]byte(networksSpecAnnotation), &networksSpec)
 	if err != nil {
 		return errorResponse(resp, "Failed to read networksSpec: %v", err)

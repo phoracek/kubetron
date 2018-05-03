@@ -43,7 +43,7 @@ if [ "$FAIL" != "0" ]; then
 fi
 
 vagrant ssh master -c "
-sudo kubeadm init --pod-network-cidr=192.168.0.0/16 | tee /tmp/init &&
+sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --kubernetes-version=stable-1.10 | tee /tmp/init &&
 sudo kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f https://docs.projectcalico.org/v3.0/getting-started/kubernetes/installation/hosted/kubeadm/1.7/calico.yaml &&
 while ( sudo kubectl --kubeconfig /etc/kubernetes/admin.conf get pods --no-headers --all-namespaces | grep -v Running ); do
     sleep 1

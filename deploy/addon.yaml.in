@@ -222,26 +222,70 @@ items:
         nodeSelector:
           "kubernetes.io/hostname": "master"
 
+- apiVersion: apps/v1
+  kind: DaemonSet
+  metadata:
+    name: deviceplugin
+    namespace: kubetron
+  spec:
+    selector:
+      matchLabels:
+        name: deviceplugin
+    template:
+      metadata:
+        labels:
+          name: deviceplugin
+      spec:
+        hostNetwork: true
+        hostPID: true
+        containers:
+        - name: deviceplugin
+          image: phoracek/kubetron-deviceplugin:latest
+          imagePullPolicy: Always
+          args:
+            - --resource-name=$(RESOURCE_NAME)
+            - --v=6
+          securityContext:
+            privileged: true
+          env:
+          - name: RESOURCE_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: config
+                key: resourceName
+          volumeMounts:
+            - name: var-run
+              mountPath: /var/run
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+        volumes:
+          - name: var-run
+            hostPath:
+              path: /var/run
+          - name: device-plugin
+            hostPath:
+              path: /var/lib/kubelet/device-plugins
+
 - apiVersion: admissionregistration.k8s.io/v1beta1
   kind: MutatingWebhookConfiguration
   metadata:
     name: kubetron
   webhooks:
-    - name: kubetron.network.kubevirt.io
-      clientConfig:
-        service:
-          name: admission
-          namespace: kubetron
-          path: /apis/kubetron.network.kubevirt.io/v1alpha1/admission
-        caBundle: $KUBERNETES_CA
-      rules:
-        - operations: ["CREATE", "DELETE"]
-          apiGroups: ["*"]
-          apiVersions: ["*"]
-          resources:
-            - pods
-      failurePolicy: Fail
-      namespaceSelector:
-        matchExpressions:
-        - key: kubetron.network.kubevirt.io/ignoreAdmission
-          operator: DoesNotExist
+  - name: kubetron.network.kubevirt.io
+    clientConfig:
+      service:
+        name: admission
+        namespace: kubetron
+        path: /apis/kubetron.network.kubevirt.io/v1alpha1/admission
+      caBundle: $KUBERNETES_CA
+    rules:
+      - operations: ["CREATE", "DELETE"]
+        apiGroups: ["*"]
+        apiVersions: ["*"]
+        resources:
+        - pods
+    failurePolicy: Fail
+    namespaceSelector:
+      matchExpressions:
+      - key: kubetron.network.kubevirt.io/ignoreAdmission
+        operator: DoesNotExist
