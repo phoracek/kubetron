@@ -1,5 +1,8 @@
 // TODO: remove orhpan interfaces in another thread
 // TODO: use prestart container request, no need to wait
+// TODO: cleanup if a step fails
+// TODO: this is hideous
+// TODO: load networkSpec annotation name from common module
 package deviceplugin
 
 import (
@@ -7,9 +10,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
@@ -17,7 +21,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/kubevirt/device-plugin-manager/pkg/dpm"
 	"github.com/phoracek/kubetron/pkg/spec"
-	"github.com/vishvananda/netlink"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -41,366 +44,188 @@ type Lister struct {
 }
 
 func (l Lister) GetResourceNamespace() string {
-	glog.V(6).Infof("Getting namespace %s", l.ResourceNamespace)
 	return l.ResourceNamespace
 }
 
+// TODO: check if br-int is available
 func (l Lister) Discover(pluginListCh chan dpm.PluginNameList) {
-	glog.V(6).Infof("Discover called")
 	pluginListCh <- dpm.PluginNameList{l.ResourceName}
-	glog.V(6).Infof("Discover finished")
-	// TODO: block?
 }
 
 func (l Lister) NewPlugin(bridge string) dpm.PluginInterface {
-	glog.V(6).Infof("NewPlugin called")
 	return DevicePlugin{}
 }
 
-type DevicePlugin struct {
-	kubeclient   *kubernetes.Clientset
-	dockerclient *dockercli.Client
-}
+type DevicePlugin struct{}
 
-func (dp *DevicePlugin) GetDevicePluginOptions(ctx context.Context, in *pluginapi.Empty) (*pluginapi.DevicePluginOptions, error) {
+func (dp DevicePlugin) GetDevicePluginOptions(ctx context.Context, in *pluginapi.Empty) (*pluginapi.DevicePluginOptions, error) {
 	return &pluginapi.DevicePluginOptions{
-		PreStartRequired: true,
+		PreStartRequired: false,
 	}, nil
 }
 
 func (dp *DevicePlugin) Start() error {
-	glog.V(6).Infof("DP Start called")
-	kubeClientConfig, err := rest.InClusterConfig()
-	if err != nil {
-		return fmt.Errorf("failed to obtain kubernetes client config: %v", err)
-	}
-
-	kubeclient, err := kubernetes.NewForConfig(kubeClientConfig)
-	if err != nil {
-		return fmt.Errorf("failed to intialize kubernetes client: %v", err)
-	}
-	dp.kubeclient = kubeclient
-
-	dockerclient, err := dockercli.NewEnvClient()
-	if err != nil {
-		return fmt.Errorf("failed to intialize docker client: %v", err)
-	}
-	dp.dockerclient = dockerclient
-
-	err = createFakeDevice()
-
-	glog.V(6).Infof("DP Start finished OK")
+	err := createFakeDevice()
 	return err
 }
 
 func (dp DevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
-	glog.V(6).Infof("ListAndWatch called")
-	var bridgeDevs []*pluginapi.Device
-	for i := 0; i < nicsPoolSize; i++ {
-		bridgeDevs = append(bridgeDevs, &pluginapi.Device{
-			ID:     fmt.Sprintf("nic-%02d", i),
-			Health: pluginapi.Healthy,
-		})
-	}
-	s.Send(&pluginapi.ListAndWatchResponse{Devices: bridgeDevs})
-	glog.V(6).Infof("ListAndWatch sent devices %s", bridgeDevs)
 	for {
+		var bridgeDevs []*pluginapi.Device
+		for i := 0; i < nicsPoolSize; i++ {
+			bridgeDevs = append(bridgeDevs, &pluginapi.Device{
+				ID:     fmt.Sprintf("nic-%02d", i),
+				Health: pluginapi.Healthy,
+			})
+		}
+		s.Send(&pluginapi.ListAndWatchResponse{Devices: bridgeDevs})
 		time.Sleep(10 * time.Second)
 	}
 	return nil
 }
 
+// TODO: stop if fails
+// TODO: cleanup if fails
 func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
-	// TODO: maybe we don't need that
-	/*
-		if len(r.ContainerRequests) != 1 {
-			return nil, fmt.Errorf("allocate request must contain exactly one container request")
+	glog.V(6).Infof("Allocate called")
+	responses := pluginapi.AllocateResponse{}
+
+	// TODO: needed?
+	for _, _ = range r.ContainerRequests {
+		response := pluginapi.ContainerAllocateResponse{}
+		responses.ContainerResponses = append(responses.ContainerResponses, &response)
+	}
+
+	if len(r.ContainerRequests) != 1 {
+		return nil, fmt.Errorf("Allocate request must contain exactly one container request")
+	}
+
+	if len(r.ContainerRequests[0].DevicesIDs) != 1 {
+		return nil, fmt.Errorf("Allocate request must contain exactly one device")
+	}
+
+	nic := r.ContainerRequests[0].DevicesIDs[0]
+
+	go func() {
+
+		time.Sleep(10 * time.Second)
+
+		checkpointRaw, err := ioutil.ReadFile(devicepluginCheckpointPath)
+		if err != nil {
+			glog.Errorf("Failed to read device plugin checkpoint file: %v", err)
 		}
 
-		if len(r.ContainerRequests[0].DevicesIDs) != 1 {
-			return nil, fmt.Errorf("allocate request must contain exactly one device")
+		var checkpoint map[string]interface{}
+		err = json.Unmarshal(checkpointRaw, &checkpoint)
+		if err != nil {
+			glog.Errorf("Failed to unmarshal device plugin checkpoint file: %v", err)
 		}
-	*/
 
-	var response pluginapi.AllocateResponse
-
-	// TODO: maybe we don't need that
-	/*
-		response.ContainerResponses = make([]*pluginapi.ContainerAllocateResponse, 0)
-
-		nic := r.ContainerRequests[0].DevicesIDs[0]
-		dev := new(pluginapi.DeviceSpec)
-		dev.HostPath = fakeDeviceHostPath
-		dev.ContainerPath = fakeDeviceGuestPath
-		dev.Permissions = "r"
-		response.ContainerResponses[0].Devices = append(response.ContainerResponses[0].Devices, dev)
-	*/
-
-	// TODO: move this to pre start
-	/*
-		go func() {
-
-			time.Sleep(time.Second)
-
-			checkpointRaw, err := ioutil.ReadFile(devicepluginCheckpointPath)
-			if err != nil {
-				panic(fmt.Errorf("failed to read device plugin checkpoint file: %v", err))
-			}
-
-			var checkpoint map[string]interface{}
-			err = json.Unmarshal(checkpointRaw, &checkpoint)
-			if err != nil {
-				panic(fmt.Errorf("failed to unmarshal device plugin checkpoint file: %v", err))
-			}
-
-			podUID := ""
-			entries := checkpoint["Entries"].([]map[string]interface{})
-		EntriesLoop:
-			for _, entry := range entries {
-				for _, deviceID := range entry["DeviceIDs"].([]string) {
-					if deviceID == nic {
-						podUID = entry["PodUID"].(string)
-						break EntriesLoop
-					}
+		// TODO: use something smarter to check if found, function
+		podUID := ""
+	EntriesLoop:
+		for _, entry := range checkpoint["PodDeviceEntries"].([]interface{}) {
+			for _, deviceID := range entry.(map[string]interface{})["DeviceIDs"].([]interface{}) {
+				if deviceID.(string) == nic {
+					podUID = entry.(map[string]interface{})["PodUID"].(string)
+					break EntriesLoop
 				}
-			}
-			if podUID == "" {
-				panic(fmt.Errorf("failed to find PodUID"))
-			}
-
-			var thePod v1.Pod
-			podFound := false
-			pods, err := dp.kubeclient.CoreV1().Pods("").List(metav1.ListOptions{})
-			if err != nil {
-				panic(fmt.Errorf("failed to list pods: %v", err))
-			}
-			for _, pod := range pods.Items {
-				fmt.Println(pod.Name, pod.Status.PodIP)
-				if string(pod.UID) == podUID {
-					thePod = pod
-					podFound = true
-					break
-				}
-			}
-			if !podFound {
-				panic(fmt.Errorf("failed to find pod with given PodUID"))
-			}
-
-			podName := thePod.Name
-			podNamespace := thePod.Namespace
-			var networksSpec spec.NetworksSpec
-			err = json.Unmarshal([]byte(thePod.Labels[networksSpecAnnotationName]), &networksSpec)
-			if err != nil {
-				panic(fmt.Errorf("failed to read networks spec: %v", err))
-			}
-
-			containerName := fmt.Sprintf("k8s_POD_%s_%s", podName, podNamespace)
-
-			containers, err := dp.dockerclient.ContainerList(context.Background(), dockertypes.ContainerListOptions{})
-			if err != nil {
-				panic(fmt.Errorf("failed to list docker containers: %v", err))
-			}
-
-			containerPid := -1
-			for i := 0; i <= 10; i++ {
-				for _, container := range containers {
-					config, err := dp.dockerclient.ContainerInspect(context.Background(), container.ID)
-					if err != nil {
-						panic(fmt.Errorf("failed to inspect docker container: %v", err))
-					}
-
-					if config.Name == containerName {
-						containerPid = config.State.Pid
-						break
-					}
-				}
-				time.Sleep(10 * time.Second)
-			}
-			if containerPid == -1 {
-				panic(fmt.Errorf("Failed to find container PID"))
-			}
-
-			for _, spec := range networksSpec {
-				err = exec.Command(
-					"ovs-vsctl", "--",
-					"add-port", "br-int", spec.PortName, "--",
-					"set", "Interface", spec.PortName, "type=internal",
-				).Run()
-				if err != nil {
-					panic(err)
-				}
-
-				port, err := netlink.LinkByName(spec.PortName)
-				if err != nil {
-					panic(err)
-				}
-
-				err = netlink.LinkSetNsPid(port, containerPid)
-				if err != nil {
-					panic(err)
-				}
-
-				hwaddr, err := net.ParseMAC(spec.MacAddress)
-				if err != nil {
-					panic(err)
-				}
-
-				err = netlink.LinkSetHardwareAddr(port, hwaddr)
-				if err != nil {
-					panic(err)
-				}
-
-				err = netlink.LinkSetUp(port)
-				if err != nil {
-					panic(err)
-				}
-
-				err = exec.Command(
-					"ovs-vsctl", "set", "Interface", spec.PortName, fmt.Sprintf("external_ids:iface-id=%s", spec.PortID),
-				).Run()
-				if err != nil {
-					panic(err)
-				}
-				// TODO: call dhclient ipam
-			}
-
-		}()
-	*/
-
-	return &response, nil
-}
-
-func (dp *DevicePlugin) PreStartContainer(ctx context.Context, r *pluginapi.PreStartContainerRequest) (*pluginapi.PreStartContainerResponse, error) {
-	var response pluginapi.PreStartContainerResponse
-
-	if len(r.DevicesIDs) != 1 {
-		return nil, fmt.Errorf("allocate request must contain exactly one device")
-	}
-
-	nic := r.DevicesIDs[0]
-
-	checkpointRaw, err := ioutil.ReadFile(devicepluginCheckpointPath)
-	if err != nil {
-		panic(fmt.Errorf("failed to read device plugin checkpoint file: %v", err))
-	}
-
-	var checkpoint map[string]interface{}
-	err = json.Unmarshal(checkpointRaw, &checkpoint)
-	if err != nil {
-		panic(fmt.Errorf("failed to unmarshal device plugin checkpoint file: %v", err))
-	}
-
-	podUID := ""
-	entries := checkpoint["Entries"].([]map[string]interface{})
-EntriesLoop:
-	for _, entry := range entries {
-		for _, deviceID := range entry["DeviceIDs"].([]string) {
-			if deviceID == nic {
-				podUID = entry["PodUID"].(string)
-				break EntriesLoop
 			}
 		}
-	}
-	if podUID == "" {
-		panic(fmt.Errorf("failed to find PodUID"))
-	}
-
-	var thePod v1.Pod
-	podFound := false
-	pods, err := dp.kubeclient.CoreV1().Pods("").List(metav1.ListOptions{})
-	if err != nil {
-		panic(fmt.Errorf("failed to list pods: %v", err))
-	}
-	for _, pod := range pods.Items {
-		fmt.Println(pod.Name, pod.Status.PodIP)
-		if string(pod.UID) == podUID {
-			thePod = pod
-			podFound = true
-			break
+		if podUID == "" {
+			glog.Errorf("Failed to find PodUID")
 		}
-	}
-	if !podFound {
-		panic(fmt.Errorf("failed to find pod with given PodUID"))
-	}
 
-	podName := thePod.Name
-	podNamespace := thePod.Namespace
-	var networksSpec spec.NetworksSpec
-	err = json.Unmarshal([]byte(thePod.Labels[networksSpecAnnotationName]), &networksSpec)
-	if err != nil {
-		panic(fmt.Errorf("failed to read networks spec: %v", err))
-	}
+		var thePod v1.Pod
+		podFound := false
 
-	containerName := fmt.Sprintf("k8s_POD_%s_%s", podName, podNamespace)
+		// TODO: keep clients in DP struct
+		kubeClientConfig, err := rest.InClusterConfig()
+		if err != nil {
+			glog.Errorf("Failed to obtain kubernetes client config: %v", err)
+		}
 
-	containers, err := dp.dockerclient.ContainerList(context.Background(), dockertypes.ContainerListOptions{})
-	if err != nil {
-		panic(fmt.Errorf("failed to list docker containers: %v", err))
-	}
+		kubeclient, err := kubernetes.NewForConfig(kubeClientConfig)
+		if err != nil {
+			glog.Errorf("Failed to intialize kubernetes client: %v", err)
+		}
 
-	containerPid := -1
-	for i := 0; i <= 10; i++ {
-		for _, container := range containers {
-			config, err := dp.dockerclient.ContainerInspect(context.Background(), container.ID)
-			if err != nil {
-				panic(fmt.Errorf("failed to inspect docker container: %v", err))
-			}
+		dockerclient, err := dockercli.NewEnvClient()
+		if err != nil {
+			glog.Errorf("Failed to intialize docker client: %v", err)
+		}
 
-			if config.Name == containerName {
-				containerPid = config.State.Pid
+		pods, err := kubeclient.CoreV1().Pods("").List(metav1.ListOptions{})
+		if err != nil {
+			glog.Errorf("Failed to list pods: %v", err)
+		}
+		for _, pod := range pods.Items {
+			fmt.Println(pod.Name, pod.Status.PodIP)
+			if string(pod.UID) == podUID {
+				thePod = pod
+				podFound = true
 				break
 			}
 		}
-		time.Sleep(10 * time.Second)
-	}
-	if containerPid == -1 {
-		panic(fmt.Errorf("Failed to find container PID"))
-	}
-
-	for _, spec := range networksSpec {
-		err = exec.Command(
-			"ovs-vsctl", "--",
-			"add-port", "br-int", spec.PortName, "--",
-			"set", "Interface", spec.PortName, "type=internal",
-		).Run()
-		if err != nil {
-			panic(err)
+		if !podFound {
+			glog.Errorf("Failed to find pod with given PodUID")
 		}
 
-		port, err := netlink.LinkByName(spec.PortName)
+		podName := thePod.Name
+		podNamespace := thePod.Namespace
+		var networksSpec spec.NetworksSpec
+		annotations := thePod.ObjectMeta.GetAnnotations()
+		networksSpecAnnotation, _ := annotations[networksSpecAnnotationName]
+
+		err = json.Unmarshal([]byte(networksSpecAnnotation), &networksSpec)
 		if err != nil {
-			panic(err)
+			glog.Errorf("Failed to read networks spec: %v", err)
 		}
 
-		err = netlink.LinkSetNsPid(port, containerPid)
+		containerName := fmt.Sprintf("k8s_POD_%s_%s", podName, podNamespace)
+
+		containers, err := dockerclient.ContainerList(context.Background(), dockertypes.ContainerListOptions{})
 		if err != nil {
-			panic(err)
+			glog.Errorf("Failed to list docker containers: %v", err)
 		}
 
-		hwaddr, err := net.ParseMAC(spec.MacAddress)
-		if err != nil {
-			panic(err)
+		containerPid := -1
+	RetriesLoop:
+		for i := 0; i <= 10; i++ {
+			for _, container := range containers {
+				config, err := dockerclient.ContainerInspect(context.Background(), container.ID)
+				if err != nil {
+					glog.Errorf("Failed to inspect docker container: %v", err)
+				}
+
+				if strings.Contains(config.Name, containerName) {
+					containerPid = config.State.Pid
+					break RetriesLoop
+				}
+			}
+			time.Sleep(10 * time.Second)
+		}
+		if containerPid == -1 {
+			glog.Errorf("Failed to find container PID")
 		}
 
-		err = netlink.LinkSetHardwareAddr(port, hwaddr)
-		if err != nil {
-			panic(err)
+		// TODO: run in parallel, make sure to precreate netns (colission)
+		for _, spec := range networksSpec {
+			if err := exec.Command("attach-pod", containerName, spec.PortName, spec.PortID, spec.MacAddress, strconv.Itoa(containerPid)).Run(); err != nil {
+				// TODO: include logs here
+				glog.Errorf("attach-pod failed, check logs in respective ds")
+			}
 		}
 
-		err = netlink.LinkSetUp(port)
-		if err != nil {
-			panic(err)
-		}
+	}()
 
-		err = exec.Command(
-			"ovs-vsctl", "set", "Interface", spec.PortName, fmt.Sprintf("external_ids:iface-id=%s", spec.PortID),
-		).Run()
-		if err != nil {
-			panic(err)
-		}
-		// TODO: call dhclient ipam
-	}
+	return &responses, nil
+}
 
+// TODO: use this instead of separate thread during Allocate
+func (dp DevicePlugin) PreStartContainer(ctx context.Context, r *pluginapi.PreStartContainerRequest) (*pluginapi.PreStartContainerResponse, error) {
+	glog.V(6).Infof("PreStartContainer called")
+	var response pluginapi.PreStartContainerResponse
 	return &response, nil
 }
 

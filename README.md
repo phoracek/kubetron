@@ -107,7 +107,9 @@ docker push phoracek/kubetron-admission:latest
 
 ## TODO
 
-- Device plugin was not implemented yet, that means it does not fully work yet.
 - Design deck
 - Currenty communicates with Neutron API in plaintext without any auth.
   Provide security configuration.
+- If possible, communicate with OVN NB, not Neutron.
+- Make images smaller.
+- Limit security only to needed.

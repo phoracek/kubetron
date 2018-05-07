@@ -1,15 +1,23 @@
-#[[constraint]]
-#  name = "github.com/openshift/generic-admission-server"
-#  version = "1.10"
+[[constraint]]
+  name = "github.com/openshift/generic-admission-server"
+  branch = "release-1.10"
 
 [[constraint]]
   name = "k8s.io/api"
-  version = "kubernetes-1.10.0"
+  branch = "release-1.10"
 
-#[[constraint]]
-#  name = "k8s.io/apimachinery"
-#  version = "kubernetes-1.10.0"
+[[constraint]]
+  name = "k8s.io/apimachinery"
+  branch = "release-1.10"
 
-#[[constraint]]
-#  name = "k8s.io/client-go"
-#  version = "7.0.0"
+[[constraint]]
+  name = "k8s.io/apiserver"
+  branch = "release-1.10"
+
+[[constraint]]
+  name = "k8s.io/client-go"
+  branch = "release-7.0"
+
+[[constraint]]
+  name = "github.com/kubevirt/device-plugin-manager"
+  branch = "master"

@@ -138,7 +138,7 @@ func (ah *AdmissionHook) admitCreate(req *admissionv1beta1.AdmissionRequest) *ad
 
 	resourceContainer := v1.Container{
 		Name:  "kubetron-request-sidecart",
-		Image: "scratch",
+		Image: "cirros", // TODO: create our own from scratch
 		Resources: v1.ResourceRequirements{
 			Limits: v1.ResourceList{
 				v1.ResourceName(ah.ResourceName): resource.MustParse("1"),
@@ -266,7 +266,7 @@ func generateRandomMac() string {
 
 func generatePortName(networkName string) string {
 	prefixLen := min(len(networkName), 8)
-	suffixLen := 14 - prefixLen
+	suffixLen := 13 - prefixLen
 	suffix := make([]byte, suffixLen)
 	for i := range suffix {
 		suffix[i] = letters[rand.Intn(len(letters))]

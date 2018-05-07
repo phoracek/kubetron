@@ -7,6 +7,6 @@ metadata:
 spec:
   containers:
     - name: example-pod
-      image: ubuntu
-      command: ["sleep", "999"]
+      image: alpine
+      command: ["sleep", "9999"]
   restartPolicy: Never

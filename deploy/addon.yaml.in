@@ -4,7 +4,6 @@ apiVersion: v1
 kind: List
 items:
 
-# TODO: check if we need this
 - apiVersion: v1
   kind: ServiceAccount
   metadata:
@@ -40,26 +39,52 @@ items:
     name: system:unauthenticated
     apiGroup: rbac.authorization.k8s.io
 
+# TODO: limit to needed, now everything is allowed
+- apiVersion: rbac.authorization.k8s.io/v1beta1
+  kind: ClusterRole
+  metadata:
+    name: kubetron:system:admission-reader
+  rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+    nonResourceURLs: []
+
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: kubetron:system:admission-reader
+  roleRef:
+    apiGroup: ""
+    kind: ClusterRole
+    name: kubetron:system:admission-reader
+  subjects:
+  - kind: ServiceAccount
+    name: kubetron
+    namespace: kubetron
+
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRole
   metadata:
-    name: kubetron:system:pod-reader
+    name: kubetron:system:reader
   rules:
     - apiGroups:
         - ""
       resources:
         - pods
+        - namespaces
       verbs:
         - get
+        - list
 
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRoleBinding
   metadata:
-    name: kubetron:system:pod-reader
+    name: kubetron:system:reader
   roleRef:
     apiGroup: ""
     kind: ClusterRole
-    name: kubetron:system:pod-reader
+    name: kubetron:system:reader
   subjects:
   - kind: ServiceAccount
     name: kubetron
@@ -222,50 +247,6 @@ items:
         nodeSelector:
           "kubernetes.io/hostname": "master"
 
-- apiVersion: apps/v1
-  kind: DaemonSet
-  metadata:
-    name: deviceplugin
-    namespace: kubetron
-  spec:
-    selector:
-      matchLabels:
-        name: deviceplugin
-    template:
-      metadata:
-        labels:
-          name: deviceplugin
-      spec:
-        hostNetwork: true
-        hostPID: true
-        containers:
-        - name: deviceplugin
-          image: phoracek/kubetron-deviceplugin:latest
-          imagePullPolicy: Always
-          args:
-            - --resource-name=$(RESOURCE_NAME)
-            - --v=6
-          securityContext:
-            privileged: true
-          env:
-          - name: RESOURCE_NAME
-            valueFrom:
-              configMapKeyRef:
-                name: config
-                key: resourceName
-          volumeMounts:
-            - name: var-run
-              mountPath: /var/run
-            - name: device-plugin
-              mountPath: /var/lib/kubelet/device-plugins
-        volumes:
-          - name: var-run
-            hostPath:
-              path: /var/run
-          - name: device-plugin
-            hostPath:
-              path: /var/lib/kubelet/device-plugins
-
 - apiVersion: admissionregistration.k8s.io/v1beta1
   kind: MutatingWebhookConfiguration
   metadata:
@@ -289,3 +270,54 @@ items:
       matchExpressions:
       - key: kubetron.network.kubevirt.io/ignoreAdmission
         operator: DoesNotExist
+
+- apiVersion: apps/v1
+  kind: DaemonSet
+  metadata:
+    name: deviceplugin
+    namespace: kubetron
+  spec:
+    selector:
+      matchLabels:
+        name: deviceplugin
+    template:
+      metadata:
+        labels:
+          name: deviceplugin
+      spec:
+        serviceAccountName: kubetron
+        hostNetwork: true
+        hostPID: true
+        containers:
+        - name: deviceplugin
+          image: phoracek/kubetron-deviceplugin:latest
+          imagePullPolicy: Always
+          args:
+            - -resource-name=$(RESOURCE_NAME)
+            - -v=6
+            - -logtostderr
+          securityContext:
+            privileged: true
+          env:
+          - name: RESOURCE_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: config
+                key: resourceName
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+            - name: var-run
+              mountPath: /var/run
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+        volumes:
+          - name: var-run
+            hostPath:
+              path: /var/run
+          - name: proc
+            hostPath:
+              path: /proc
+          - name: device-plugin
+            hostPath:
+              path: /var/lib/kubelet/device-plugins
