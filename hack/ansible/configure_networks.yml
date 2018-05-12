@@ -1,0 +1,8 @@
+---
+- name: Configure simple networking
+  hosts:
+    - master
+  gather_facts: no
+  roles:
+    - prepare-os-host
+    - create-two-networks-with-subnets

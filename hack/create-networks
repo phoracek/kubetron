@@ -1,35 +1,9 @@
-#!/bin/bash -xe
+#!/bin/bash -x
 
-RED_NETWORK=`vagrant ssh master -c "curl --data '{\"network\":{\"name\":\"red\"}}' http://localhost:9696/v2.0/networks"`
-RED_NETWORK=${RED_NETWORK//[ $'\001'-$'\037']}
-RED_NETWORK_ID=`python -c "import json; print(json.loads('$RED_NETWORK')['network']['id'])"`
-RED_SUBNET=`vagrant ssh master -c "curl --data '{
-    \"subnet\":
-        {
+# remove known_hosts entry
+ssh-keygen -R 192.168.122.10
 
-            \"gateway_ip\": \"10.1.0.100\",
-            \"enable_dhcp\": true,
-            \"network_id\": \"$RED_NETWORK_ID\",
-            \"cidr\": \"10.1.0.0/24\",
-            \"dns_nameservers\": [
-                \"8.8.8.8\"
-            ]
-        }
-}' http://localhost:9696/v2.0/subnets"`
-
-BLUE_NETWORK=`vagrant ssh master -c "curl --data '{\"network\":{\"name\":\"blue\"}}' http://localhost:9696/v2.0/networks"`
-BLUE_NETWORK=${BLUE_NETWORK//[ $'\001'-$'\037']}
-BLUE_NETWORK_ID=`python -c "import json; print(json.loads('$BLUE_NETWORK')['network']['id'])"`
-BLUE_SUBNET=`vagrant ssh master -c "curl --data '{
-    \"subnet\":
-        {
-
-            \"gateway_ip\": \"10.2.0.100\",
-            \"enable_dhcp\": true,
-            \"network_id\": \"$BLUE_NETWORK_ID\",
-            \"cidr\": \"10.2.0.0/24\",
-            \"dns_nameservers\": [
-                \"8.8.8.8\"
-            ]
-        }
-}' http://localhost:9696/v2.0/subnets"`
+# run ansible playbooks
+pushd hack/ansible
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts configure_networks.yml
+popd

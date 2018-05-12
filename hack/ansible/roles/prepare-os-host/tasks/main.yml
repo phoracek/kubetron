@@ -1,0 +1,20 @@
+---
+- name: Install python2-shade
+  become: yes
+  dnf:
+    name: python2-shade
+    state: present
+
+- name: Install libselinux-python
+  become: yes
+  dnf:
+    name: libselinux-python
+    state: present
+
+- name: Make sure openstack config directory exists
+  file: path="~/.config/openstack" state=directory
+
+- name: Copy clouds.yml configuration to remote server
+  copy:
+    src: clouds.yml
+    dest: "~/.config/openstack/clouds.yml"

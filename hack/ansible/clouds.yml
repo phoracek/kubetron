@@ -1,0 +1,7 @@
+clouds:
+  vagrant:
+    auth:
+      auth_url: http://127.0.0.1:35357/v2.0
+      username: user
+      password: pass
+    verify: false

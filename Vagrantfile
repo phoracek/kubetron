@@ -8,6 +8,7 @@ Vagrant.configure("2") do |config|
   config.vm.define "master" do |master|
     master.vm.box = "fedora/27-cloud-base"
     master.vm.provision "shell", inline: "hostnamectl set-hostname master"
+    master.vm.network "private_network", ip: "192.168.122.10"
   end
 
   config.vm.define "node1" do |node1|
