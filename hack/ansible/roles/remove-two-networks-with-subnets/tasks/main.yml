@@ -1,0 +1,24 @@
+---
+- name: Remove subnet for network red
+  os_subnet:
+    cloud: "{{ cloud_name }}"
+    state: absent
+    name: red_subnet
+
+- name: Remove subnet for network blue
+  os_subnet:
+    cloud: "{{ cloud_name }}"
+    state: absent
+    name: blue_subnet
+
+- name: Remove network red
+  os_network:
+    cloud: "{{ cloud_name }}"
+    state: absent
+    name: red
+
+- name: Remove network blue
+  os_network:
+    cloud: "{{ cloud_name }}"
+    state: absent
+    name: blue

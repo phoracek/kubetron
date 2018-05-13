@@ -1,0 +1,8 @@
+---
+- name: Remove simple networking
+  hosts:
+    - master
+  gather_facts: no
+  roles:
+    - prepare-os-host
+    - remove-two-networks-with-subnets
