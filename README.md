@@ -11,7 +11,12 @@ Neutron-like API). Currently supports only OVN implementation.
 PRs and issues are welcome.
 
 Slide deck with desired kubetron model and demo: [Google Docs](https://docs.google.com/presentation/d/1KiHQyZngdaL8gtreL9Tmy7S1XiY5Sbnn0YuNCqhggF8/edit?usp=sharing)
-[![asciicast](https://asciinema.org/a/7nB3vgIJcz05TxRNiaD2vLLdE.png)](https://asciinema.org/a/7nB3vgIJcz05TxRNiaD2vLLdE)
+
+1. [Development environment usage](#development-environment-usage)
+2. [Installation and usage](#installation-and-usage)
+3. [Demo](#demo)
+4. [Development](#development)
+5. [TODO](#todo)
 
 ## Development environment usage
 
@@ -113,6 +118,10 @@ vagrant ssh master -c "curl http://localhost:9696/v2.0/ports" | jq
 # verify that network ports were removed
 vagrant ssh master -c "curl http://localhost:9696/v2.0/ports" | jq
 ```
+
+## Demo
+
+[![asciicast](https://asciinema.org/a/7nB3vgIJcz05TxRNiaD2vLLdE.png)](https://asciinema.org/a/7nB3vgIJcz05TxRNiaD2vLLdE)
 
 ## Development
 
