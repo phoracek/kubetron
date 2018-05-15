@@ -11,6 +11,7 @@ Neutron-like API). Currently supports only OVN implementation.
 PRs and issues are welcome.
 
 Slide deck with desired kubetron model and demo: [Google Docs](https://docs.google.com/presentation/d/1KiHQyZngdaL8gtreL9Tmy7S1XiY5Sbnn0YuNCqhggF8/edit?usp=sharing)
+[![asciicast](https://asciinema.org/a/7nB3vgIJcz05TxRNiaD2vLLdE.png)](https://asciinema.org/a/7nB3vgIJcz05TxRNiaD2vLLdE)
 
 ## Development environment usage
 
