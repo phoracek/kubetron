@@ -110,10 +110,8 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 
 	initializedPod := pod.DeepCopy()
 
-	// TODO: only first one was checked
 	dhclientInterfaces := make([]string, 0)
 
-	// TODO: use struct instead of map, use networkspec type
 	// TODO: cleanup if fails
 	networksSpec := make(map[string]spec.NetworkSpec)
 	for _, network := range networks {
