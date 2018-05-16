@@ -38,10 +38,6 @@ type AdmissionHook struct {
 }
 
 func (ah *AdmissionHook) Initialize(kubeClientConfig *restclient.Config, stopCh <-chan struct{}) error {
-	if ah.ProviderURL == "" {
-		return fmt.Errorf("provider-url was not set")
-	}
-
 	client, err := kubernetes.NewForConfig(kubeClientConfig)
 	if err != nil {
 		return fmt.Errorf("failed to intialise kubernetes clientset: %v", err)
