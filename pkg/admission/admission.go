@@ -61,15 +61,15 @@ func (ah *AdmissionHook) MutatingResource() (schema.GroupVersionResource, string
 
 func (ah *AdmissionHook) Admit(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
 	if req.Operation == admissionv1beta1.Create {
-		return ah.admitCreate(req)
+		return ah.handleAdmissionRequestToCreate(req)
 	} else if req.Operation == admissionv1beta1.Delete {
-		return ah.admitDelete(req)
+		return ah.handleAdmissionRequestToDelete(req)
 	} else {
-		return ah.admitIgnore(req)
+		return ah.ignoreAdmissionRequest(req)
 	}
 }
 
-func (ah *AdmissionHook) admitCreate(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
+func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
 	resp := &admissionv1beta1.AdmissionResponse{}
 	resp.UID = req.UID
 	requestName := fmt.Sprintf("%s %s/%s", req.Kind, req.Namespace, req.Name)
@@ -181,7 +181,7 @@ func (ah *AdmissionHook) admitCreate(req *admissionv1beta1.AdmissionRequest) *ad
 }
 
 // TODO: move duplicated code to functions
-func (ah *AdmissionHook) admitDelete(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
+func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
 	resp := &admissionv1beta1.AdmissionResponse{}
 	resp.UID = req.UID
 	requestName := fmt.Sprintf("%s %s/%s", req.Kind, req.Namespace, req.Name)
@@ -222,7 +222,7 @@ func (ah *AdmissionHook) admitDelete(req *admissionv1beta1.AdmissionRequest) *ad
 	return resp
 }
 
-func (ah *AdmissionHook) admitIgnore(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
+func (ah *AdmissionHook) ignoreAdmissionRequest(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
 	resp := &admissionv1beta1.AdmissionResponse{}
 	resp.UID = req.UID
 	requestName := fmt.Sprintf("%s %s/%s", req.Kind, req.Namespace, req.Name)
@@ -250,6 +250,7 @@ func createPatch(old []byte, new []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling patch: %v", err)
 	}
+
 	return patchBytes, nil
 }
 
