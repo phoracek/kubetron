@@ -1,4 +1,3 @@
-// TODO: cleanup and refactoring
 // TODO: expose env vars with KUBETRON_NETWORK_NAME="interface_name" to containers
 package admission
 
@@ -76,6 +75,7 @@ func (ah *AdmissionHook) Admit(req *admissionv1beta1.AdmissionRequest) *admissio
 
 	requestName := fmt.Sprintf("%s %s %s/%s", req.Operation, req.Kind, req.Namespace, req.Name)
 	glog.V(2).Infof("[%s] Processing request", requestName)
+	glog.V(6).Infof("[%s] Input: %s", requestName, string(req.Object.Raw))
 
 	// Only handle Pod CREATE and DELETE calls, ignore the rest
 	if req.Operation == admissionv1beta1.Create {
@@ -95,7 +95,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 	pod := v1.Pod{}
 	err := json.Unmarshal(req.Object.Raw, &pod)
 	if err != nil {
-		setResponseError(resp, "Failed to read Pod: %v", err)
+		setResponseError(resp, requestName, "Failed to read Pod: %v", err)
 		return
 	}
 
@@ -113,21 +113,19 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 	for _, rawNetwork := range strings.Split(networksAnnotation, ",") {
 		networks = append(networks, strings.Trim(rawNetwork, " "))
 	}
-	glog.V(6).Infof("[%s] Networks: %s", requestName, networks)
-
-	glog.V(6).Infof("[%s] Input: %s", requestName, string(req.Object.Raw))
+	glog.V(4).Infof("[%s] Networks: %s", requestName, networks)
 
 	// Get map of available networks (keys) and their respective IDs (values)
 	providerNetworkIDsByNames, err := ah.providerClient.ListNetworkIDsByNames()
 	if err != nil {
-		setResponseError(resp, "Failed to list provider networks: %v", err)
+		setResponseError(resp, requestName, "Failed to list provider networks: %v", err)
 		return
 	}
 
 	// Verify that all requested networks exist and are available
 	for _, network := range networks {
 		if _, ok := providerNetworkIDsByNames[network]; !ok {
-			setResponseError(resp, "Network %s was not found", network)
+			setResponseError(resp, requestName, "Network %s was not found", network)
 			return
 		}
 	}
@@ -150,7 +148,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 		// Create the port on OVN NB
 		portID, hasFixedIPs, err := ah.providerClient.CreateNetworkPort(providerNetworkIDsByNames[network], portName, macAddress)
 		if err != nil {
-			setResponseError(resp, "Error creating port: %v", err)
+			setResponseError(resp, requestName, "Error creating port: %v", err)
 			return
 		}
 
@@ -170,7 +168,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 	// Marshal networksSpec into JSON bytes and save it as the Pod's annotation
 	networksSpecJSON, err := json.Marshal(networksSpec)
 	if err != nil {
-		setResponseError(resp, "Failed to marshal networksSpec: %v", err)
+		setResponseError(resp, requestName, "Failed to marshal networksSpec: %v", err)
 		return
 	}
 	initializedPod.ObjectMeta.Annotations[networksSpecAnnotationName] = string(networksSpecJSON)
@@ -196,21 +194,21 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 	// Marshal initialized Pod specification into JSON bytes, so it can be later used to create a patch
 	newData, err := json.Marshal(initializedPod)
 	if err != nil {
-		setResponseError(resp, "Failed to encode processed request: %v", err)
+		setResponseError(resp, requestName, "Failed to encode processed request: %v", err)
 		return
 	}
 
 	// Create patch that will add the annotation and side-container to original Pod specification
 	patchBytes, err := createPatch(req.Object.Raw, newData)
 	if err != nil {
-		setResponseError(resp, "Error creating patch: %v", err)
+		setResponseError(resp, requestName, "Error creating patch: %v", err)
 		return
 	}
 
 	// Save the patch to AdmissionResponse
 	if string(patchBytes) != "[]" {
 		glog.V(2).Infof("[%s] Patching", requestName)
-		glog.V(4).Infof("[%s] Patch: %s", requestName, string(patchBytes))
+		glog.V(6).Infof("[%s] Patch: %s", requestName, string(patchBytes))
 		resp.Patch = patchBytes
 		resp.PatchType = func() *admissionv1beta1.PatchType { // TODO: could i use it directly? new()
 			pt := admissionv1beta1.PatchTypeJSONPatch
@@ -222,16 +220,13 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 }
 
 // handleAdmissionRequestToDelete reads networksSpec of give Pod, if the Pod has some ports assigned, this methods make sure they their respective LSP will be removed from OVN NB
-// TODO: move duplicated code to functions
 func (ah *AdmissionHook) handleAdmissionRequestToDelete(requestName string, req *admissionv1beta1.AdmissionRequest, resp *admissionv1beta1.AdmissionResponse) {
 	// Read current spec of the to-be-removed Pod
 	pod, err := ah.client.CoreV1().Pods(req.Namespace).Get(req.Name, metav1.GetOptions{})
 	if err != nil {
-		setResponseError(resp, "Failed to obtain Pod: %v", err)
+		setResponseError(resp, requestName, "Failed to obtain Pod: %v", err)
 		return
 	}
-
-	glog.V(6).Infof("[%s] Input: %s", requestName, string(req.Object.Raw))
 
 	// Read Pod's networksSpec annotation, if not found, don't process the request, just allow it
 	annotations := pod.ObjectMeta.GetAnnotations()
@@ -246,16 +241,16 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(requestName string, req 
 	networksSpec := spec.NetworksSpec{}
 	err = json.Unmarshal([]byte(networksSpecAnnotation), &networksSpec)
 	if err != nil {
-		setResponseError(resp, "Failed to read networksSpec: %v", err)
+		setResponseError(resp, requestName, "Failed to read networksSpec: %v", err)
 		return
 	}
-	glog.V(2).Infof("[%s] Network spec: %s", requestName, networksSpecAnnotation)
+	glog.V(4).Infof("[%s] Network spec: %s", requestName, networksSpecAnnotation)
 
 	// Remove assigned Pod's LSPs from OVN
 	for _, spec := range networksSpec {
 		err := ah.providerClient.DeleteNetworkPort(spec.PortID)
 		if err != nil {
-			setResponseError(resp, "Error creating port: %v", err)
+			setResponseError(resp, requestName, "Error creating port: %v", err)
 			return
 		}
 	}
@@ -296,14 +291,13 @@ func createPatch(old []byte, new []byte) ([]byte, error) {
 
 // setResponseError is a helper that denies AdmissionRequest and populates AddmissionResponse with an error message
 // TODO: Log request name
-func setResponseError(resp *admissionv1beta1.AdmissionResponse, message string, args ...interface{}) {
-	glog.Errorf(message, args...)
+func setResponseError(resp *admissionv1beta1.AdmissionResponse, requestName string, message string, args ...interface{}) {
+	glog.Errorf("[%s] %s", requestName, fmt.Sprintf(message, args...))
 	resp.Allowed = false
 	resp.Result = &metav1.Status{
 		Status: metav1.StatusFailure, Code: http.StatusInternalServerError, Reason: metav1.StatusReasonInternalError,
 		Message: fmt.Sprintf(message, args...),
 	}
-	return
 }
 
 // generateRandomMac returns random local unicast MAC address
