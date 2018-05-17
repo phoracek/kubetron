@@ -1,5 +1,4 @@
 // TODO: improve logging
-// TODO: add documentation
 // TODO: cleanup and refactoring
 // TODO: expose env vars with KUBETRON_NETWORK_NAME="interface_name" to containers
 package admission
@@ -24,32 +23,45 @@ import (
 )
 
 const (
+	// This annotation is used by user to request list of networks delimited by comma
 	networksAnnotationName     = "kubetron.network.kubevirt.io/networks"
+	// This annotation is populated by Admission Controller and contains information later used by Device Plugin
 	networksSpecAnnotationName = "kubetron.network.kubevirt.io/networksSpec"
+	// Used not to overwrite last patch created by Kubernetes
 	lastAppliedConfigPath      = "/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration"
+	// Letters used to generate random interface suffix
 	letters                    = "abcdefghijklmnopqrstuvwxyz"
 )
 
+// AdmissionHook is implementation of generic-admission-server MutatingAdmissionHook interface
 type AdmissionHook struct {
+	// Full URL of OVN Manager (e.g. Neutron or oVirt OVN provider)
 	ProviderURL    string
+	// Name of resource exposed by Kubetron's Device Plugin
 	ResourceName   string
+	// Kubernetes client instance
 	client         *kubernetes.Clientset
+	// Client to access OVN Manager
 	providerClient *providerClient
 }
 
+// Initialize is called once when generic-addmission-server starts
 func (ah *AdmissionHook) Initialize(kubeClientConfig *restclient.Config, stopCh <-chan struct{}) error {
+	// Initialize Kubernetes client, configuration is passed from generic-admission-server
 	client, err := kubernetes.NewForConfig(kubeClientConfig)
 	if err != nil {
 		return fmt.Errorf("failed to intialise kubernetes clientset: %v", err)
 	}
 	ah.client = client
 
+	// Initialize OVN Manager client
 	ah.providerClient = NewProviderClient(ah.ProviderURL)
 
-	glog.Info("Webhook Initialization Complete.")
+	glog.V(2).Info("Webhook Initialization Complete.")
 	return nil
 }
 
+// MutatingResource registers MutatingAdmissionHook resource in Kubernetes, it is called once when generic-admission-server starts
 func (ah *AdmissionHook) MutatingResource() (schema.GroupVersionResource, string) {
 	return schema.GroupVersionResource{
 			Group:    "kubetron.network.kubevirt.io",
@@ -59,7 +71,9 @@ func (ah *AdmissionHook) MutatingResource() (schema.GroupVersionResource, string
 		"Admission"
 }
 
+// Admit is called per each API request touching selected resources. Resource selector is defined in MutatingWebhookConfiguration as a part of Kubetron manifest and handles only Pods
 func (ah *AdmissionHook) Admit(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
+	// Only handle Pod CREATE and DELETE calls, ignore the rest
 	if req.Operation == admissionv1beta1.Create {
 		return ah.handleAdmissionRequestToCreate(req)
 	} else if req.Operation == admissionv1beta1.Delete {
@@ -69,17 +83,22 @@ func (ah *AdmissionHook) Admit(req *admissionv1beta1.AdmissionRequest) *admissio
 	}
 }
 
+// handleAdmissionRequestToCreate makes sure that if a Pod requests networks, respective LSPs will be created and side-container requesting Kubetron Device Plugin resource will be added
 func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
 	resp := &admissionv1beta1.AdmissionResponse{}
 	resp.UID = req.UID
-	requestName := fmt.Sprintf("%s %s/%s", req.Kind, req.Namespace, req.Name)
 
+	requestName := fmt.Sprintf("%s %s/%s", req.Kind, req.Namespace, req.Name)
+	glog.V(2).Infof("Processing %s request for %s", req.Operation, requestName)
+
+	// Parse Pod object from request
 	pod := v1.Pod{}
 	err := json.Unmarshal(req.Object.Raw, &pod)
 	if err != nil {
 		return errorResponse(resp, "Failed to read Pod: %v", err)
 	}
 
+	// Read Pod's networks annotation, if it is missing (the Pod does not want any extra networks), request left unprocessed and just allowed
 	annotations := pod.ObjectMeta.GetAnnotations()
 	networksAnnotation, networkAnnotationFound := annotations[networksAnnotationName]
 	if !networkAnnotationFound {
@@ -88,56 +107,70 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 		return resp
 	}
 
+	// Get list of desired networks, networks annotation contains a string with a list of networks delimited by comma
 	networks := make([]string, 0)
 	for _, rawNetwork := range strings.Split(networksAnnotation, ",") {
 		networks = append(networks, strings.Trim(rawNetwork, " "))
 	}
-	// TODO: v6 log for networks
-
-	glog.V(2).Infof("Processing %s request for %s", req.Operation, requestName)
+	glog.V(6).Infof("%s requests networks: %s", requestName, networks)
 
 	glog.V(6).Infof("Input for %s: %s", requestName, string(req.Object.Raw))
 
+	// Get map of available networks (keys) and their respective IDs (values)
 	providerNetworkIDsByNames, err := ah.providerClient.ListNetworkIDsByNames()
 	if err != nil {
 		return errorResponse(resp, "Failed to list provider networks: %v", err)
 	}
+
+	// Verify that all requested networks exist and are available
 	for _, network := range networks {
 		if _, ok := providerNetworkIDsByNames[network]; !ok {
 			return errorResponse(resp, "Network %s was not found", network)
 		}
 	}
 
+	// initializedPod will be later updated by Admission
 	initializedPod := pod.DeepCopy()
 
+	// dhclientInterfaces is a list that keeps track of all assigned interfaces that will require DHCP client to obtain an IP address
 	dhclientInterfaces := make([]string, 0)
 
-	// TODO: cleanup if fails
+	// networksSpec will be later saved as the Pod's annotation, it keeps ports' details that are later used by Device Plugin to complete attachment
 	networksSpec := make(map[string]spec.NetworkSpec)
+
+	// Create port per each network request, such ports are only in OVN NB database, no actual interfaces are created at this point
+	// TODO: cleanup if fails
 	for _, network := range networks {
 		macAddress := generateRandomMac()
 		portName := generatePortName(network)
+
+		// Create the port on OVN NB
 		portID, hasFixedIPs, err := ah.providerClient.CreateNetworkPort(providerNetworkIDsByNames[network], portName, macAddress)
 		if err != nil {
 			return errorResponse(resp, "Error creating port: %v", err)
 		}
 
+		// If selected network has a subnet assigned, fixed IPs will be assigned to the port, add such interfaces to dhclientInterfaces list so we later call DHCP client on them
 		if hasFixedIPs {
 			dhclientInterfaces = append(dhclientInterfaces, portName)
 		}
 
+		// NetworkSpec is later used by Device Plugin to create an interface with PortName and MacAddress and mark it with PortID on OVS so it will be mapped to already created OVN port
 		networksSpec[network] = spec.NetworkSpec{
 			MacAddress: macAddress,
 			PortName:   portName,
 			PortID:     portID,
 		}
 	}
+
+	// Marshal networksSpec into JSON bytes and save it as the Pod's annotation
 	networksSpecJSON, err := json.Marshal(networksSpec)
 	if err != nil {
 		return errorResponse(resp, "Failed to marshal networksSpec: %v", err)
 	}
 	initializedPod.ObjectMeta.Annotations[networksSpecAnnotationName] = string(networksSpecJSON)
 
+	// Add a side-container to the Pod. This side-container will request Kubetron resource, with this request, Kubernetes scheduler will later place this Pod on a Node with Kubetron Device Plugin installed. This side-container also runs DHCP server on ports with assigned subnet
 	// TODO: configure readiness on sidecar
 	resourceContainer := v1.Container{
 		Name:  "kubetron-request-sidecart",
@@ -148,22 +181,26 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 			},
 		},
 		SecurityContext: &v1.SecurityContext{
+			// This side-container must be privileged in order to change Pod's IPs
 			Privileged: newTrue(),
 		},
 		Args: dhclientInterfaces,
 	}
 	initializedPod.Spec.Containers = append(pod.Spec.Containers, resourceContainer)
 
+	// Marshal initialized Pod specification into JSON bytes, so it can be later used to create a patch
 	newData, err := json.Marshal(initializedPod)
 	if err != nil {
 		return errorResponse(resp, "Failed to encode processed request: %v", err)
 	}
 
+	// Create patch that will add the annotation and side-container to original Pod specification
 	patchBytes, err := createPatch(req.Object.Raw, newData)
 	if err != nil {
 		return errorResponse(resp, "Error creating patch: %v", err)
 	}
 
+	// Save the patch to AdmissionResponse
 	if string(patchBytes) != "[]" {
 		glog.V(2).Infof("Patching %s", requestName)
 		glog.V(4).Infof("Patch for %s: %s", requestName, string(patchBytes))
@@ -178,21 +215,24 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 	return resp
 }
 
+// handleAdmissionRequestToDelete reads networksSpec of give Pod, if the Pod has some ports assigned, this methods make sure they their respective LSP will be removed from OVN NB
 // TODO: move duplicated code to functions
 func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
 	resp := &admissionv1beta1.AdmissionResponse{}
 	resp.UID = req.UID
-	requestName := fmt.Sprintf("%s %s/%s", req.Kind, req.Namespace, req.Name)
 
+	requestName := fmt.Sprintf("%s %s/%s", req.Kind, req.Namespace, req.Name)
+	glog.V(2).Infof("Processing %s request for %s", req.Operation, requestName)
+
+	// Read current spec of the to-be-removed Pod
 	pod, err := ah.client.CoreV1().Pods(req.Namespace).Get(req.Name, metav1.GetOptions{})
 	if err != nil {
 		return errorResponse(resp, "Failed to obtain Pod: %v", err)
 	}
 
-	glog.V(2).Infof("Processing %s request for %s", req.Operation, requestName)
-
 	glog.V(6).Infof("Input for %s: %s", requestName, string(req.Object.Raw))
 
+	// Read Pod's networksSpec annotation, if not found, don't process the request, just allow it
 	annotations := pod.ObjectMeta.GetAnnotations()
 	networksSpecAnnotation, networksSpecAnnotationFound := annotations[networksSpecAnnotationName]
 	if !networksSpecAnnotationFound {
@@ -201,6 +241,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.Ad
 		return resp
 	}
 
+	// Parse networksSpec in order to obtain ports' IDs
 	networksSpec := spec.NetworksSpec{}
 	err = json.Unmarshal([]byte(networksSpecAnnotation), &networksSpec)
 	if err != nil {
@@ -208,6 +249,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.Ad
 	}
 	glog.V(2).Infof("Network spec for request %s: %s", requestName, networksSpecAnnotation)
 
+	// Remove assigned Pod's LSPs from OVN
 	for _, spec := range networksSpec {
 		err := ah.providerClient.DeleteNetworkPort(spec.PortID)
 		if err != nil {
@@ -220,15 +262,19 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.Ad
 	return resp
 }
 
+// ignoreAdmissionRequest ignores AdmissionRequest's contents and just allows it
 func (ah *AdmissionHook) ignoreAdmissionRequest(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
 	resp := &admissionv1beta1.AdmissionResponse{}
 	resp.UID = req.UID
+	resp.Allowed = true
+
 	requestName := fmt.Sprintf("%s %s/%s", req.Kind, req.Namespace, req.Name)
 	glog.V(2).Infof("Skipping %s request for %s", req.Operation, requestName)
-	resp.Allowed = true
+
 	return resp
 }
 
+// createPatch creates a RFC 6902 patch between old and new
 func createPatch(old []byte, new []byte) ([]byte, error) {
 	patch, err := jsonpatch.CreatePatch(old, new)
 	if err != nil {
@@ -252,6 +298,7 @@ func createPatch(old []byte, new []byte) ([]byte, error) {
 	return patchBytes, nil
 }
 
+// errorResponse is a helper that denies AdmissionRequest and populates AddmissionResponse with an error message
 func errorResponse(resp *admissionv1beta1.AdmissionResponse, message string, args ...interface{}) *admissionv1beta1.AdmissionResponse {
 	glog.Errorf(message, args...)
 	resp.Allowed = false
@@ -262,16 +309,19 @@ func errorResponse(resp *admissionv1beta1.AdmissionResponse, message string, arg
 	return resp
 }
 
+// generateRandomMac returns random local unicast MAC address
 func generateRandomMac() string {
 	buf := make([]byte, 6)
 	_, err := rand.Read(buf)
 	if err != nil {
 		panic(err)
 	}
-	buf[0] = (buf[0] | 2) & 0xfe
+	buf[0] = (buf[0] | 2) & 0xfe // make the address local and unicast
 	return fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5])
 }
 
+// generatePortName builds name of a port in format ${NETWORK_NAME}-${RANDOM_SUFFIX}, length of the name is set to 15 characters so it fits max length of an interface name
+// TODO: keep prefix and suffix length in a constant
 func generatePortName(networkName string) string {
 	prefixLen := min(len(networkName), 8)
 	suffixLen := 13 - prefixLen
@@ -282,6 +332,7 @@ func generatePortName(networkName string) string {
 	return fmt.Sprintf("%s-%s", networkName[0:prefixLen], suffix)
 }
 
+// min returns the lower of two int values
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -289,6 +340,7 @@ func min(a, b int) int {
 	return b
 }
 
+// newTrue is used to create pointer to true
 func newTrue() *bool {
 	b := true
 	return &b
