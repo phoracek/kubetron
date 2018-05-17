@@ -23,23 +23,23 @@ import (
 
 const (
 	// This annotation is used by user to request list of networks delimited by comma
-	networksAnnotationName     = "kubetron.network.kubevirt.io/networks"
+	networksAnnotationName = "kubetron.network.kubevirt.io/networks"
 	// This annotation is populated by Admission Controller and contains information later used by Device Plugin
 	networksSpecAnnotationName = "kubetron.network.kubevirt.io/networksSpec"
 	// Used not to overwrite last patch created by Kubernetes
-	lastAppliedConfigPath      = "/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration"
+	lastAppliedConfigPath = "/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration"
 	// Letters used to generate random interface suffix
-	letters                    = "abcdefghijklmnopqrstuvwxyz"
+	letters = "abcdefghijklmnopqrstuvwxyz"
 )
 
 // AdmissionHook is implementation of generic-admission-server MutatingAdmissionHook interface
 type AdmissionHook struct {
 	// Full URL of OVN Manager (e.g. Neutron or oVirt OVN provider)
-	ProviderURL    string
+	ProviderURL string
 	// Name of resource exposed by Kubetron's Device Plugin
-	ResourceName   string
+	ResourceName string
 	// Kubernetes client instance
-	client         *kubernetes.Clientset
+	client *kubernetes.Clientset
 	// Client to access OVN Manager
 	providerClient *providerClient
 }
@@ -71,21 +71,23 @@ func (ah *AdmissionHook) MutatingResource() (schema.GroupVersionResource, string
 
 // Admit is called per each API request touching selected resources. Resource selector is defined in MutatingWebhookConfiguration as a part of Kubetron manifest and handles only Pods
 func (ah *AdmissionHook) Admit(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
-	// Only handle Pod CREATE and DELETE calls, ignore the rest
-	if req.Operation == admissionv1beta1.Create {
-		return ah.handleAdmissionRequestToCreate(req)
-	} else if req.Operation == admissionv1beta1.Delete {
-		return ah.handleAdmissionRequestToDelete(req)
-	} else {
-		return ah.ignoreAdmissionRequest(req)
-	}
-}
-
-// handleAdmissionRequestToCreate makes sure that if a Pod requests networks, respective LSPs will be created and side-container requesting Kubetron Device Plugin resource will be added
-func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
 	resp := &admissionv1beta1.AdmissionResponse{}
 	resp.UID = req.UID
 
+	// Only handle Pod CREATE and DELETE calls, ignore the rest
+	if req.Operation == admissionv1beta1.Create {
+		ah.handleAdmissionRequestToCreate(req, resp)
+	} else if req.Operation == admissionv1beta1.Delete {
+		ah.handleAdmissionRequestToDelete(req, resp)
+	} else {
+		ah.ignoreAdmissionRequest(req, resp)
+	}
+
+	return resp
+}
+
+// handleAdmissionRequestToCreate makes sure that if a Pod requests networks, respective LSPs will be created and side-container requesting Kubetron Device Plugin resource will be added
+func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.AdmissionRequest, resp *admissionv1beta1.AdmissionResponse) {
 	requestName := fmt.Sprintf("%s %s %s/%s", req.Operation, req.Kind, req.Namespace, req.Name)
 	glog.V(2).Infof("[%s] Processing request", requestName)
 
@@ -93,7 +95,8 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 	pod := v1.Pod{}
 	err := json.Unmarshal(req.Object.Raw, &pod)
 	if err != nil {
-		return errorResponse(resp, "Failed to read Pod: %v", err)
+		setResponseError(resp, "Failed to read Pod: %v", err)
+		return
 	}
 
 	// Read Pod's networks annotation, if it is missing (the Pod does not want any extra networks), request left unprocessed and just allowed
@@ -102,7 +105,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 	if !networkAnnotationFound {
 		glog.V(2).Infof("[%s] Skipping: Required annotation not present", requestName)
 		resp.Allowed = true
-		return resp
+		return
 	}
 
 	// Get list of desired networks, networks annotation contains a string with a list of networks delimited by comma
@@ -117,13 +120,15 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 	// Get map of available networks (keys) and their respective IDs (values)
 	providerNetworkIDsByNames, err := ah.providerClient.ListNetworkIDsByNames()
 	if err != nil {
-		return errorResponse(resp, "Failed to list provider networks: %v", err)
+		setResponseError(resp, "Failed to list provider networks: %v", err)
+		return
 	}
 
 	// Verify that all requested networks exist and are available
 	for _, network := range networks {
 		if _, ok := providerNetworkIDsByNames[network]; !ok {
-			return errorResponse(resp, "Network %s was not found", network)
+			setResponseError(resp, "Network %s was not found", network)
+			return
 		}
 	}
 
@@ -145,7 +150,8 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 		// Create the port on OVN NB
 		portID, hasFixedIPs, err := ah.providerClient.CreateNetworkPort(providerNetworkIDsByNames[network], portName, macAddress)
 		if err != nil {
-			return errorResponse(resp, "Error creating port: %v", err)
+			setResponseError(resp, "Error creating port: %v", err)
+			return
 		}
 
 		// If selected network has a subnet assigned, fixed IPs will be assigned to the port, add such interfaces to dhclientInterfaces list so we later call DHCP client on them
@@ -164,7 +170,8 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 	// Marshal networksSpec into JSON bytes and save it as the Pod's annotation
 	networksSpecJSON, err := json.Marshal(networksSpec)
 	if err != nil {
-		return errorResponse(resp, "Failed to marshal networksSpec: %v", err)
+		setResponseError(resp, "Failed to marshal networksSpec: %v", err)
+		return
 	}
 	initializedPod.ObjectMeta.Annotations[networksSpecAnnotationName] = string(networksSpecJSON)
 
@@ -189,13 +196,15 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 	// Marshal initialized Pod specification into JSON bytes, so it can be later used to create a patch
 	newData, err := json.Marshal(initializedPod)
 	if err != nil {
-		return errorResponse(resp, "Failed to encode processed request: %v", err)
+		setResponseError(resp, "Failed to encode processed request: %v", err)
+		return
 	}
 
 	// Create patch that will add the annotation and side-container to original Pod specification
 	patchBytes, err := createPatch(req.Object.Raw, newData)
 	if err != nil {
-		return errorResponse(resp, "Error creating patch: %v", err)
+		setResponseError(resp, "Error creating patch: %v", err)
+		return
 	}
 
 	// Save the patch to AdmissionResponse
@@ -210,22 +219,19 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 	}
 
 	resp.Allowed = true
-	return resp
 }
 
 // handleAdmissionRequestToDelete reads networksSpec of give Pod, if the Pod has some ports assigned, this methods make sure they their respective LSP will be removed from OVN NB
 // TODO: move duplicated code to functions
-func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
-	resp := &admissionv1beta1.AdmissionResponse{}
-	resp.UID = req.UID
-
+func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.AdmissionRequest, resp *admissionv1beta1.AdmissionResponse) {
 	requestName := fmt.Sprintf("%s %s %s/%s", req.Operation, req.Kind, req.Namespace, req.Name)
 	glog.V(2).Infof("[%s] Processing", requestName)
 
 	// Read current spec of the to-be-removed Pod
 	pod, err := ah.client.CoreV1().Pods(req.Namespace).Get(req.Name, metav1.GetOptions{})
 	if err != nil {
-		return errorResponse(resp, "Failed to obtain Pod: %v", err)
+		setResponseError(resp, "Failed to obtain Pod: %v", err)
+		return
 	}
 
 	glog.V(6).Infof("[%s] Input: %s", requestName, string(req.Object.Raw))
@@ -236,14 +242,15 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.Ad
 	if !networksSpecAnnotationFound {
 		glog.V(2).Infof("[%s] Skipping: Required annotation not present.", req.Operation, requestName)
 		resp.Allowed = true
-		return resp
+		return
 	}
 
 	// Parse networksSpec in order to obtain ports' IDs
 	networksSpec := spec.NetworksSpec{}
 	err = json.Unmarshal([]byte(networksSpecAnnotation), &networksSpec)
 	if err != nil {
-		return errorResponse(resp, "Failed to read networksSpec: %v", err)
+		setResponseError(resp, "Failed to read networksSpec: %v", err)
+		return
 	}
 	glog.V(2).Infof("[%s] Network spec: %s", requestName, networksSpecAnnotation)
 
@@ -251,25 +258,21 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.Ad
 	for _, spec := range networksSpec {
 		err := ah.providerClient.DeleteNetworkPort(spec.PortID)
 		if err != nil {
-			return errorResponse(resp, "Error creating port: %v", err)
+			setResponseError(resp, "Error creating port: %v", err)
+			return
 		}
 	}
 	glog.V(2).Infof("[%s] Successfully created ports", requestName)
 
 	resp.Allowed = true
-	return resp
 }
 
 // ignoreAdmissionRequest ignores AdmissionRequest's contents and just allows it
-func (ah *AdmissionHook) ignoreAdmissionRequest(req *admissionv1beta1.AdmissionRequest) *admissionv1beta1.AdmissionResponse {
-	resp := &admissionv1beta1.AdmissionResponse{}
-	resp.UID = req.UID
+func (ah *AdmissionHook) ignoreAdmissionRequest(req *admissionv1beta1.AdmissionRequest, resp *admissionv1beta1.AdmissionResponse) {
 	resp.Allowed = true
 
 	requestName := fmt.Sprintf("%s %s %s/%s", req.Operation, req.Kind, req.Namespace, req.Name)
 	glog.V(2).Infof("[%s] Skipping", requestName)
-
-	return resp
 }
 
 // createPatch creates a RFC 6902 patch between old and new
@@ -296,16 +299,16 @@ func createPatch(old []byte, new []byte) ([]byte, error) {
 	return patchBytes, nil
 }
 
-// errorResponse is a helper that denies AdmissionRequest and populates AddmissionResponse with an error message
+// setResponseError is a helper that denies AdmissionRequest and populates AddmissionResponse with an error message
 // TODO: Log request name
-func errorResponse(resp *admissionv1beta1.AdmissionResponse, message string, args ...interface{}) *admissionv1beta1.AdmissionResponse {
+func setResponseError(resp *admissionv1beta1.AdmissionResponse, message string, args ...interface{}) {
 	glog.Errorf(message, args...)
 	resp.Allowed = false
 	resp.Result = &metav1.Status{
 		Status: metav1.StatusFailure, Code: http.StatusInternalServerError, Reason: metav1.StatusReasonInternalError,
 		Message: fmt.Sprintf(message, args...),
 	}
-	return resp
+	return
 }
 
 // generateRandomMac returns random local unicast MAC address
