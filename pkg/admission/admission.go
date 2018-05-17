@@ -74,23 +74,23 @@ func (ah *AdmissionHook) Admit(req *admissionv1beta1.AdmissionRequest) *admissio
 	resp := &admissionv1beta1.AdmissionResponse{}
 	resp.UID = req.UID
 
+	requestName := fmt.Sprintf("%s %s %s/%s", req.Operation, req.Kind, req.Namespace, req.Name)
+	glog.V(2).Infof("[%s] Processing request", requestName)
+
 	// Only handle Pod CREATE and DELETE calls, ignore the rest
 	if req.Operation == admissionv1beta1.Create {
-		ah.handleAdmissionRequestToCreate(req, resp)
+		ah.handleAdmissionRequestToCreate(requestName, req, resp)
 	} else if req.Operation == admissionv1beta1.Delete {
-		ah.handleAdmissionRequestToDelete(req, resp)
+		ah.handleAdmissionRequestToDelete(requestName, req, resp)
 	} else {
-		ah.ignoreAdmissionRequest(req, resp)
+		ah.ignoreAdmissionRequest(requestName, req, resp)
 	}
 
 	return resp
 }
 
 // handleAdmissionRequestToCreate makes sure that if a Pod requests networks, respective LSPs will be created and side-container requesting Kubetron Device Plugin resource will be added
-func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.AdmissionRequest, resp *admissionv1beta1.AdmissionResponse) {
-	requestName := fmt.Sprintf("%s %s %s/%s", req.Operation, req.Kind, req.Namespace, req.Name)
-	glog.V(2).Infof("[%s] Processing request", requestName)
-
+func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req *admissionv1beta1.AdmissionRequest, resp *admissionv1beta1.AdmissionResponse) {
 	// Parse Pod object from request
 	pod := v1.Pod{}
 	err := json.Unmarshal(req.Object.Raw, &pod)
@@ -223,10 +223,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 
 // handleAdmissionRequestToDelete reads networksSpec of give Pod, if the Pod has some ports assigned, this methods make sure they their respective LSP will be removed from OVN NB
 // TODO: move duplicated code to functions
-func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.AdmissionRequest, resp *admissionv1beta1.AdmissionResponse) {
-	requestName := fmt.Sprintf("%s %s %s/%s", req.Operation, req.Kind, req.Namespace, req.Name)
-	glog.V(2).Infof("[%s] Processing", requestName)
-
+func (ah *AdmissionHook) handleAdmissionRequestToDelete(requestName string, req *admissionv1beta1.AdmissionRequest, resp *admissionv1beta1.AdmissionResponse) {
 	// Read current spec of the to-be-removed Pod
 	pod, err := ah.client.CoreV1().Pods(req.Namespace).Get(req.Name, metav1.GetOptions{})
 	if err != nil {
@@ -268,10 +265,8 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.Ad
 }
 
 // ignoreAdmissionRequest ignores AdmissionRequest's contents and just allows it
-func (ah *AdmissionHook) ignoreAdmissionRequest(req *admissionv1beta1.AdmissionRequest, resp *admissionv1beta1.AdmissionResponse) {
+func (ah *AdmissionHook) ignoreAdmissionRequest(requestName string, req *admissionv1beta1.AdmissionRequest, resp *admissionv1beta1.AdmissionResponse) {
 	resp.Allowed = true
-
-	requestName := fmt.Sprintf("%s %s %s/%s", req.Operation, req.Kind, req.Namespace, req.Name)
 	glog.V(2).Infof("[%s] Skipping", requestName)
 }
 
