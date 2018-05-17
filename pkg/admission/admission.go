@@ -1,4 +1,3 @@
-// TODO: improve logging
 // TODO: cleanup and refactoring
 // TODO: expose env vars with KUBETRON_NETWORK_NAME="interface_name" to containers
 package admission
@@ -50,14 +49,13 @@ func (ah *AdmissionHook) Initialize(kubeClientConfig *restclient.Config, stopCh 
 	// Initialize Kubernetes client, configuration is passed from generic-admission-server
 	client, err := kubernetes.NewForConfig(kubeClientConfig)
 	if err != nil {
-		return fmt.Errorf("failed to intialise kubernetes clientset: %v", err)
+		return fmt.Errorf("failed to initialize Kubernetes client: %v", err)
 	}
 	ah.client = client
 
 	// Initialize OVN Manager client
 	ah.providerClient = NewProviderClient(ah.ProviderURL)
 
-	glog.V(2).Info("Webhook Initialization Complete.")
 	return nil
 }
 
@@ -88,8 +86,8 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 	resp := &admissionv1beta1.AdmissionResponse{}
 	resp.UID = req.UID
 
-	requestName := fmt.Sprintf("%s %s/%s", req.Kind, req.Namespace, req.Name)
-	glog.V(2).Infof("Processing %s request for %s", req.Operation, requestName)
+	requestName := fmt.Sprintf("%s %s %s/%s", req.Operation, req.Kind, req.Namespace, req.Name)
+	glog.V(2).Infof("[%s] Processing request", requestName)
 
 	// Parse Pod object from request
 	pod := v1.Pod{}
@@ -102,7 +100,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 	annotations := pod.ObjectMeta.GetAnnotations()
 	networksAnnotation, networkAnnotationFound := annotations[networksAnnotationName]
 	if !networkAnnotationFound {
-		glog.V(2).Infof("Skipping %s request for %s: Required annotation not present.", req.Operation, requestName)
+		glog.V(2).Infof("[%s] Skipping: Required annotation not present", requestName)
 		resp.Allowed = true
 		return resp
 	}
@@ -112,9 +110,9 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 	for _, rawNetwork := range strings.Split(networksAnnotation, ",") {
 		networks = append(networks, strings.Trim(rawNetwork, " "))
 	}
-	glog.V(6).Infof("%s requests networks: %s", requestName, networks)
+	glog.V(6).Infof("[%s] Networks: %s", requestName, networks)
 
-	glog.V(6).Infof("Input for %s: %s", requestName, string(req.Object.Raw))
+	glog.V(6).Infof("[%s] Input: %s", requestName, string(req.Object.Raw))
 
 	// Get map of available networks (keys) and their respective IDs (values)
 	providerNetworkIDsByNames, err := ah.providerClient.ListNetworkIDsByNames()
@@ -202,8 +200,8 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(req *admissionv1beta1.Ad
 
 	// Save the patch to AdmissionResponse
 	if string(patchBytes) != "[]" {
-		glog.V(2).Infof("Patching %s", requestName)
-		glog.V(4).Infof("Patch for %s: %s", requestName, string(patchBytes))
+		glog.V(2).Infof("[%s] Patching", requestName)
+		glog.V(4).Infof("[%s] Patch: %s", requestName, string(patchBytes))
 		resp.Patch = patchBytes
 		resp.PatchType = func() *admissionv1beta1.PatchType { // TODO: could i use it directly? new()
 			pt := admissionv1beta1.PatchTypeJSONPatch
@@ -221,8 +219,8 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.Ad
 	resp := &admissionv1beta1.AdmissionResponse{}
 	resp.UID = req.UID
 
-	requestName := fmt.Sprintf("%s %s/%s", req.Kind, req.Namespace, req.Name)
-	glog.V(2).Infof("Processing %s request for %s", req.Operation, requestName)
+	requestName := fmt.Sprintf("%s %s %s/%s", req.Operation, req.Kind, req.Namespace, req.Name)
+	glog.V(2).Infof("[%s] Processing", requestName)
 
 	// Read current spec of the to-be-removed Pod
 	pod, err := ah.client.CoreV1().Pods(req.Namespace).Get(req.Name, metav1.GetOptions{})
@@ -230,13 +228,13 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.Ad
 		return errorResponse(resp, "Failed to obtain Pod: %v", err)
 	}
 
-	glog.V(6).Infof("Input for %s: %s", requestName, string(req.Object.Raw))
+	glog.V(6).Infof("[%s] Input: %s", requestName, string(req.Object.Raw))
 
 	// Read Pod's networksSpec annotation, if not found, don't process the request, just allow it
 	annotations := pod.ObjectMeta.GetAnnotations()
 	networksSpecAnnotation, networksSpecAnnotationFound := annotations[networksSpecAnnotationName]
 	if !networksSpecAnnotationFound {
-		glog.V(2).Infof("Skipping %s request for %s: Required annotation not present.", req.Operation, requestName)
+		glog.V(2).Infof("[%s] Skipping: Required annotation not present.", req.Operation, requestName)
 		resp.Allowed = true
 		return resp
 	}
@@ -247,7 +245,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.Ad
 	if err != nil {
 		return errorResponse(resp, "Failed to read networksSpec: %v", err)
 	}
-	glog.V(2).Infof("Network spec for request %s: %s", requestName, networksSpecAnnotation)
+	glog.V(2).Infof("[%s] Network spec: %s", requestName, networksSpecAnnotation)
 
 	// Remove assigned Pod's LSPs from OVN
 	for _, spec := range networksSpec {
@@ -256,7 +254,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(req *admissionv1beta1.Ad
 			return errorResponse(resp, "Error creating port: %v", err)
 		}
 	}
-	glog.V(2).Infof("Successfully created ports for request %s", requestName)
+	glog.V(2).Infof("[%s] Successfully created ports", requestName)
 
 	resp.Allowed = true
 	return resp
@@ -268,8 +266,8 @@ func (ah *AdmissionHook) ignoreAdmissionRequest(req *admissionv1beta1.AdmissionR
 	resp.UID = req.UID
 	resp.Allowed = true
 
-	requestName := fmt.Sprintf("%s %s/%s", req.Kind, req.Namespace, req.Name)
-	glog.V(2).Infof("Skipping %s request for %s", req.Operation, requestName)
+	requestName := fmt.Sprintf("%s %s %s/%s", req.Operation, req.Kind, req.Namespace, req.Name)
+	glog.V(2).Infof("[%s] Skipping", requestName)
 
 	return resp
 }
@@ -278,7 +276,7 @@ func (ah *AdmissionHook) ignoreAdmissionRequest(req *admissionv1beta1.AdmissionR
 func createPatch(old []byte, new []byte) ([]byte, error) {
 	patch, err := jsonpatch.CreatePatch(old, new)
 	if err != nil {
-		return nil, fmt.Errorf("error calculating patch: %v", err)
+		return nil, fmt.Errorf("failed while creating patch: %v", err)
 	}
 
 	allowedOps := []jsonpatch.JsonPatchOperation{}
@@ -292,13 +290,14 @@ func createPatch(old []byte, new []byte) ([]byte, error) {
 
 	patchBytes, err := json.Marshal(allowedOps)
 	if err != nil {
-		return nil, fmt.Errorf("error marshalling patch: %v", err)
+		return nil, fmt.Errorf("failed while marshalling patch: %v", err)
 	}
 
 	return patchBytes, nil
 }
 
 // errorResponse is a helper that denies AdmissionRequest and populates AddmissionResponse with an error message
+// TODO: Log request name
 func errorResponse(resp *admissionv1beta1.AdmissionResponse, message string, args ...interface{}) *admissionv1beta1.AdmissionResponse {
 	glog.Errorf(message, args...)
 	resp.Allowed = false
