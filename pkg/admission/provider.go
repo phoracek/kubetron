@@ -1,15 +1,16 @@
+// TODO: only supports plain text with no auth, add security later
+// TODO: use keystone to access Neutron API
 package admission
 
 import (
 	resty "gopkg.in/resty.v1"
 )
 
-// TODO: only supports plain text with no auth, add security later
-
 type providerClient struct {
 	client *resty.Client
 }
 
+// NewProviderClient creates a REST client to access Neutron API
 func NewProviderClient(url string) *providerClient {
 	client := resty.
 		New().
@@ -18,10 +19,10 @@ func NewProviderClient(url string) *providerClient {
 	return &providerClient{client}
 }
 
+// ListNetworkIDsByNames returns a map where key is name of Neutron Network and key is its ID
 func (c *providerClient) ListNetworkIDsByNames() (map[string]string, error) {
 	var result map[string][]map[string]interface{}
 
-	// TODO: get id
 	// TODO: check provider error output
 	_, err := c.client.R().
 		SetResult(&result).
@@ -38,7 +39,7 @@ func (c *providerClient) ListNetworkIDsByNames() (map[string]string, error) {
 	return networkIDsByNames, nil
 }
 
-// TODO: return port id
+// CreateNetworkPort creates new Neutron Port on Neutron network with given ID
 func (c *providerClient) CreateNetworkPort(network, port, macAddress string) (string, bool, error) {
 	var result map[string]map[string]interface{}
 
@@ -57,12 +58,16 @@ func (c *providerClient) CreateNetworkPort(network, port, macAddress string) (st
 		).
 		Post("v2.0/ports")
 
+	// Read assigned ID of created Pod
 	portID := result["port"]["id"].(string)
+
+	// Check whether Port has fixed_ips, if it does, it means that selected Network has assigned subnet
 	hasFixedIPs := len(result["port"]["fixed_ips"].([]interface{})) != 0
 
 	return portID, hasFixedIPs, err
 }
 
+// DeleteNetworkPort removes Neutron Port with given ID
 func (c *providerClient) DeleteNetworkPort(portID string) error {
 	_, err := c.client.R().
 		SetPathParams(map[string]string{"portID": portID}).
