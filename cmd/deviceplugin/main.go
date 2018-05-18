@@ -9,9 +9,10 @@ import (
 )
 
 func main() {
-	resourceName := flag.String("resource-name", "", "TODO")
+	resourceName := flag.String("resource-name", "", "Name of resource exposed by Kubetron's Device Plugin")
 	flag.Parse()
 
+	// We keep full name of the resource in Kubetron config. Here we split it to resource namespace and actual name
 	resourceSplit := strings.Split(*resourceName, "/")
 
 	manager := dpm.NewManager(deviceplugin.Lister{
