@@ -29,10 +29,6 @@ import (
 
 const (
 	nicsPoolSize               = 100
-	interfaceNamePrefix        = "nic_"
-	letterBytes                = "abcdefghijklmnopqrstuvwxyz0123456789"
-	fakeDeviceHostPath         = "/var/run/kubetron-fakedev"
-	fakeDeviceGuestPath        = "/tmp/kubetron-fakedev"
 	devicepluginCheckpointPath = "/var/lib/kubelet/device-plugins/kubelet_internal_checkpoint"
 	networksSpecAnnotationName = "kubetron.network.kubevirt.io/networksSpec"
 )
@@ -64,7 +60,6 @@ func (dp DevicePlugin) GetDevicePluginOptions(ctx context.Context, in *pluginapi
 }
 
 func (dp *DevicePlugin) Start() error {
-	err := createFakeDevice()
 	return err
 }
 
@@ -267,19 +262,4 @@ func (dp DevicePlugin) PreStartContainer(ctx context.Context, r *pluginapi.PreSt
 	glog.V(6).Infof("PreStartContainer called")
 	var response pluginapi.PreStartContainerResponse
 	return &response, nil
-}
-
-func createFakeDevice() error {
-	_, stat_err := os.Stat(fakeDeviceHostPath)
-	if stat_err == nil {
-		glog.V(3).Info("Fake block device already exists")
-		return nil
-	} else if os.IsNotExist(stat_err) {
-		glog.V(3).Info("Creating fake block device")
-		cmd := exec.Command("mknod", fakeDeviceHostPath, "b", "1", "1")
-		err := cmd.Run()
-		return err
-	} else {
-		panic(stat_err)
-	}
 }
