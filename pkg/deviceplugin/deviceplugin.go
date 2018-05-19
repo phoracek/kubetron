@@ -81,7 +81,6 @@ func (dp DevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin
 // TODO: stop if fails
 // TODO: cleanup if fails
 func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
-	glog.V(6).Infof("Allocate called")
 	responses := pluginapi.AllocateResponse{}
 
 	// TODO: needed?
@@ -101,7 +100,6 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 	allocatedDeviceID := r.ContainerRequests[0].DevicesIDs[0]
 
 	go func() {
-
 		time.Sleep(10 * time.Second)
 
 		podUID, err := findPodUID(allocatedDeviceID)
@@ -133,10 +131,9 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 		for _, spec := range *networksSpec {
 			if err := exec.Command("attach-pod", containerName, spec.PortName, spec.PortID, spec.MacAddress, strconv.Itoa(containerPid)).Run(); err != nil {
 				// TODO: include logs here
-				glog.Errorf("attach-pod failed, check logs in respective ds")
+				glog.Errorf("attach-pod failed, please check logs in Daemon Set /var/log/attach-pod.err.log")
 			}
 		}
-
 	}()
 
 	return &responses, nil
@@ -259,7 +256,6 @@ RetriesLoop:
 
 // TODO: use this instead of separate thread during Allocate
 func (dp DevicePlugin) PreStartContainer(ctx context.Context, r *pluginapi.PreStartContainerRequest) (*pluginapi.PreStartContainerResponse, error) {
-	glog.V(6).Infof("PreStartContainer called")
 	var response pluginapi.PreStartContainerResponse
 	return &response, nil
 }
