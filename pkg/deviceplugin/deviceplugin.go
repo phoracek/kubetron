@@ -151,24 +151,17 @@ func findPodUID(deviceID string) (string, error) {
 		return "", fmt.Errorf("failed to unmarshal device plugin checkpoint file: %v", err)
 	}
 
-	// TODO: use something smarter to check if found, function
-	podUID := ""
-
-EntriesLoop:
 	for _, entry := range checkpoint["PodDeviceEntries"].([]interface{}) {
 		for _, deviceID := range entry.(map[string]interface{})["DeviceIDs"].([]interface{}) {
 			if deviceID.(string) == deviceID {
 				podUID = entry.(map[string]interface{})["PodUID"].(string)
-				break EntriesLoop
+				return podUID, nil
 			}
 		}
 	}
 
-	if podUID == "" {
-		return "", fmt.Errorf("failed to find a pod with matching device ID")
-	}
+	return "", fmt.Errorf("failed to find a pod with matching device ID")
 
-	return podUID, nil
 }
 
 func findPod(podUID string) (*v1.Pod, error) {
