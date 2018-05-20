@@ -59,10 +59,6 @@ func (dp DevicePlugin) GetDevicePluginOptions(ctx context.Context, in *pluginapi
 	}, nil
 }
 
-func (dp *DevicePlugin) Start() error {
-	return err
-}
-
 func (dp DevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
 	for {
 		var bridgeDevs []*pluginapi.Device
@@ -78,12 +74,11 @@ func (dp DevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin
 	return nil
 }
 
-// TODO: stop if fails
 // TODO: cleanup if fails
 func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
 	responses := pluginapi.AllocateResponse{}
 
-	// TODO: needed?
+	// TODO: is this needed?
 	for _, _ = range r.ContainerRequests {
 		response := pluginapi.ContainerAllocateResponse{}
 		responses.ContainerResponses = append(responses.ContainerResponses, &response)
@@ -120,14 +115,15 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 			return
 		}
 
-		containerPid, err := findContainerPid(pod.Name, pod.Namespace)
+		containerName := fmt.Sprintf("k8s_POD_%s_%s", pod.Name, pod.Namespace)
+
+		containerPid, err := findContainerPid(containerName)
 		if err != nil {
 			glog.Errorf("Failed to find container PID: %v", err)
 			return
 		}
 
 		// TODO: run in parallel, make sure to precreate netns (colission)
-		containerName := fmt.Sprintf("k8s_POD_%s_%s", pod.Name, pod.Namespace)
 		for _, spec := range *networksSpec {
 			if err := exec.Command("attach-pod", containerName, spec.PortName, spec.PortID, spec.MacAddress, strconv.Itoa(containerPid)).Run(); err != nil {
 				// TODO: include logs here
@@ -166,7 +162,6 @@ func findPodUID(deviceID string) (string, error) {
 
 func findPod(podUID string) (*v1.Pod, error) {
 	var thePod *v1.Pod
-	podFound := false
 
 	// TODO: keep client in DP struct
 	kubeClientConfig, err := rest.InClusterConfig()
@@ -184,6 +179,7 @@ func findPod(podUID string) (*v1.Pod, error) {
 		return nil, fmt.Errorf("failed to list pods: %v", err)
 	}
 
+	podFound := false
 	for _, pod := range pods.Items {
 		if string(pod.UID) == podUID {
 			thePod = &pod
@@ -191,7 +187,6 @@ func findPod(podUID string) (*v1.Pod, error) {
 			break
 		}
 	}
-
 	if !podFound {
 		return nil, fmt.Errorf("failed to find a pod with matching ID")
 	}
@@ -201,6 +196,7 @@ func findPod(podUID string) (*v1.Pod, error) {
 
 func buildNetworksSpec(pod *v1.Pod) (*spec.NetworksSpec, error) {
 	var networksSpec *spec.NetworksSpec
+
 	annotations := pod.ObjectMeta.GetAnnotations()
 	networksSpecAnnotation, _ := annotations[networksSpecAnnotationName]
 
@@ -209,9 +205,7 @@ func buildNetworksSpec(pod *v1.Pod) (*spec.NetworksSpec, error) {
 	return networksSpec, err
 }
 
-func findContainerPid(podName, podNamespace string) (int, error) {
-	containerName := fmt.Sprintf("k8s_POD_%s_%s", podName, podNamespace)
-
+func findContainerPid(containerName string) (int, error) {
 	// TODO: keep client in DP struct
 	dockerclient, err := dockercli.NewEnvClient()
 	if err != nil {
