@@ -217,8 +217,6 @@ func findContainerPid(containerName string) (int, error) {
 		return 0, fmt.Errorf("failed to list docker containers: %v", err)
 	}
 
-	containerPid := -1
-RetriesLoop:
 	for i := 0; i <= 10; i++ {
 		for _, container := range containers {
 			config, err := dockerclient.ContainerInspect(context.Background(), container.ID)
@@ -227,18 +225,14 @@ RetriesLoop:
 			}
 
 			if strings.Contains(config.Name, containerName) {
-				containerPid = config.State.Pid
-				break RetriesLoop
+				return config.State.Pid, nil
 			}
 		}
 		time.Sleep(10 * time.Second)
 	}
 
-	if containerPid == -1 {
-		return 0, fmt.Errorf("failed to find container PID")
-	}
+	return 0, fmt.Errorf("failed to find container PID")
 
-	return containerPid, nil
 }
 
 // TODO: use this instead of separate thread during Allocate
