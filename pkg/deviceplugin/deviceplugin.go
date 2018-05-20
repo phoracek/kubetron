@@ -161,8 +161,6 @@ func findPodUID(deviceID string) (string, error) {
 }
 
 func findPod(podUID string) (*v1.Pod, error) {
-	var thePod *v1.Pod
-
 	// TODO: keep client in DP struct
 	kubeClientConfig, err := rest.InClusterConfig()
 	if err != nil {
@@ -179,19 +177,13 @@ func findPod(podUID string) (*v1.Pod, error) {
 		return nil, fmt.Errorf("failed to list pods: %v", err)
 	}
 
-	podFound := false
 	for _, pod := range pods.Items {
 		if string(pod.UID) == podUID {
-			thePod = &pod
-			podFound = true
-			break
+			return &pod, nil
 		}
 	}
-	if !podFound {
-		return nil, fmt.Errorf("failed to find a pod with matching ID")
-	}
 
-	return thePod, nil
+	return nil, fmt.Errorf("failed to find a pod with matching ID")
 }
 
 func buildNetworksSpec(pod *v1.Pod) (*spec.NetworksSpec, error) {
