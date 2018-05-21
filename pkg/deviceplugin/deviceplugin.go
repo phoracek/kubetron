@@ -51,6 +51,13 @@ func (l Lister) GetResourceNamespace() string {
 // TODO: Check if br-int is available, if not, don't expose any resource
 func (l Lister) Discover(pluginListCh chan dpm.PluginNameList) {
 	pluginListCh <- dpm.PluginNameList{l.ResourceName}
+
+	for {
+		localNetworks := listLocalNetworks()
+		resources := append(localNetworks, l.ResourceName)
+		pluginListCh <- dpm.PluginNameList(resources)
+		time.Sleep(10 * time.Second)
+	}
 }
 
 // NewPlugin initializes new Device Plugin instance. This is called by device-plugin-manager once a new resource is discovered
