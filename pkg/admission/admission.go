@@ -45,6 +45,13 @@ type AdmissionHook struct {
 
 // Initialize is called once when generic-addmission-server starts
 func (ah *AdmissionHook) Initialize(kubeClientConfig *restclient.Config, stopCh <-chan struct{}) error {
+	if ah.ProviderURL == "" {
+		glog.Fatal(fmt.Errorf("Provider URL was not set"))
+	}
+	if ah.ResourceName == "" {
+		glog.Fatal(fmt.Errorf("Resource name was not set"))
+	}
+
 	// Initialize Kubernetes client, configuration is passed from generic-admission-server
 	client, err := kubernetes.NewForConfig(kubeClientConfig)
 	if err != nil {

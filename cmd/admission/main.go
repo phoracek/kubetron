@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 
 	"github.com/golang/glog"
@@ -21,13 +20,6 @@ func main() {
 
 	flagset.StringVarP(&ah.ProviderURL, "provider-url", "p", "", "URL of OVN manager (e.g. Neutron) API server")
 	flagset.StringVarP(&ah.ResourceName, "resource-name", "r", "", "Name of resource exposed by Kubetron's Device Plugin")
-
-	if ah.ProviderURL == "" {
-		glog.Fatal(fmt.Errorf("provider-url was not set"))
-	}
-	if ah.ResourceName == "" {
-		glog.Fatal(fmt.Errorf("resource-name was not set"))
-	}
 
 	logs.InitLogs()
 	defer logs.FlushLogs()
