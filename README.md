@@ -28,12 +28,6 @@ dnf install vagrant
 
 # install kubectl
 dnf install kubernetes-client
-
-# install cfssl and cfssljson
-curl https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 -O /bin/cfssl
-chmod +x /bin/cfssl
-curl https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 -O /bin/cfssljson
-chmod +x /bin/cfssljson
 ```
 
 Development environment provides multi-node setup of Kubernetes and

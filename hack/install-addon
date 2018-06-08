@@ -4,21 +4,6 @@ KUBECTL=./hack/kubectl
 ADMISSION_IMAGE=${ADMISSION_IMAGE:-phoracek/kubetron-admission:latest}
 DEVICEPLUGIN_IMAGE=${DEVICEPLUGIN_IMAGE:-phoracek/kubetron-deviceplugin:latest}
 
-# TODO: keep pair in hack/ no need to keep it safe in development environment
-
-cat <<EOF | cfssl genkey - | cfssljson -bare server
-{
-  "hosts": [
-    "admission.kubetron.svc"
-  ],
-  "CN": "admission.kubetron.svc",
-  "key": {
-    "algo": "ecdsa",
-    "size": 256
-  }
-}
-EOF
-
 cat <<EOF | $KUBECTL create -f -
 apiVersion: certificates.k8s.io/v1beta1
 kind: CertificateSigningRequest
@@ -27,7 +12,7 @@ metadata:
 spec:
   groups:
   - system:authenticated
-  request: $(cat server.csr | base64 | tr -d '\n')
+  request: $(cat hack/server.csr | base64 | tr -d '\n')
   usages:
   - digital signature
   - key encipherment
@@ -39,7 +24,7 @@ $KUBECTL certificate approve admission.kubetron
 $KUBECTL get csr admission.kubetron -o jsonpath='{.status.certificate}' | base64 -d > server.crt
 
 ADMISSION_CERT=$(cat server.crt | base64 -w 0)
-ADMISSION_KEY=$(cat server-key.pem | base64 -w 0)
+ADMISSION_KEY=$(cat hack/server-key.pem | base64 -w 0)
 KUBERNETES_CA=$(ssh -i id_rsa vagrant@192.168.200.11 "sudo cat /etc/kubernetes/ssl/ca.pem" | base64 -w 0)
 PROVIDER_URL=http://192.168.200.11:9696
 

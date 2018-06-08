@@ -1,8 +1,6 @@
 .vagrant
 admin.conf
-server-key.pem
 server.crt
-server.csr
 id_rsa
 id_rsa.pub
 *.retry
