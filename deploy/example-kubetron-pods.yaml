@@ -14,7 +14,7 @@ items:
         command: ["sleep", "9999"]
     restartPolicy: Never
     nodeSelector:
-      "kubernetes.io/hostname": "node1"
+      "kubernetes.io/hostname": "k8s-02"
 - kind: Pod
   apiVersion: v1
   metadata:
@@ -28,4 +28,4 @@ items:
         command: ["sleep", "9999"]
     restartPolicy: Never
     nodeSelector:
-      "kubernetes.io/hostname": "node2"
+      "kubernetes.io/hostname": "k8s-03"

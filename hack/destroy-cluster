@@ -1,0 +1,5 @@
+#!/usr/bin/bash -xe
+
+pushd hack/kubespray
+vagrant destroy
+popd

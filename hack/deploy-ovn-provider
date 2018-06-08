@@ -1,8 +1,8 @@
 #!/bin/bash -e
 
-vagrant ssh master -c "
-sudo dnf install -y http://resources.ovirt.org/pub/yum-repo/ovirt-release-master.rpm &&
-sudo dnf install -y ovirt-provider-ovn &&
+ssh -i id_rsa vagrant@192.168.200.11 "
+sudo yum install -y http://resources.ovirt.org/pub/yum-repo/ovirt-release-master.rpm ;
+sudo yum install -y ovirt-provider-ovn &&
 sudo bash -c 'cat <<EOF > /etc/ovirt-provider-ovn/conf.d/kubernetes.conf
 [SSL]
 https-enabled=false

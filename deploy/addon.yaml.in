@@ -243,9 +243,8 @@ items:
         - key: node-role.kubernetes.io/master
           operator: Exists
           effect: NoSchedule
-        # TODO: this should be based on actual role, not hostname
         nodeSelector:
-          "kubernetes.io/hostname": "master"
+          "node-role.kubernetes.io/master": "true"
 
 - apiVersion: admissionregistration.k8s.io/v1beta1
   kind: MutatingWebhookConfiguration

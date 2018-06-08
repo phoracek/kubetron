@@ -1,10 +1,8 @@
 #!/bin/bash -e
 
-sudo vagrant ssh master -c "sudo dnf install -y python"
-master_ip=$(sudo vagrant ssh master -c "python -c 'import socket, sys; sys.stdout.write(socket.gethostbyname(socket.gethostname()))'")
-
-vagrant ssh master -c "
-sudo dnf install -y openvswitch-ovn-central &&
+ssh -i id_rsa vagrant@192.168.200.11 "
+sudo yum install -y http://resources.ovirt.org/pub/yum-repo/ovirt-release-master.rpm ;
+sudo yum install -y openvswitch-ovn-central &&
 sudo systemctl enable ovn-northd &&
 sudo systemctl restart ovn-northd &&
 sudo ovn-sbctl set-connection ptcp:6642 &&
@@ -13,15 +11,14 @@ sudo ovn-nbctl set-connection ptcp:6641
 
 FAIL=0
 
-HOSTS=( node1 node2 master )
-for node in "${HOSTS[@]}"; do
+NODE_IPS=( 192.168.200.11 192.168.200.12 192.168.200.13 )
+for node_ip in "${NODE_IPS[@]}"; do
     (
-        sudo vagrant ssh $node -c "sudo dnf install -y python" &&
-        node_ip=$(sudo vagrant ssh $node -c "python -c 'import socket, sys; sys.stdout.write(socket.gethostbyname(socket.gethostname()))'") &&
-        vagrant ssh $node -c "
-sudo dnf install -y openvswitch-ovn-host &&
+        ssh -i id_rsa vagrant@$node_ip "
+sudo yum install -y http://resources.ovirt.org/pub/yum-repo/ovirt-release-master.rpm ;
+sudo yum install -y openvswitch-ovn-host &&
 sudo systemctl start openvswitch &&
-sudo ovs-vsctl set open . external-ids:ovn-remote=tcp:${master_ip}:6642 &&
+sudo ovs-vsctl set open . external-ids:ovn-remote=tcp:192.168.200.11:6642 &&
 sudo ovs-vsctl set open . external-ids:ovn-encap-type=geneve &&
 sudo ovs-vsctl set open . external-ids:ovn-encap-ip=${node_ip} &&
 sudo systemctl enable openvswitch &&

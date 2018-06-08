@@ -1,13 +1,25 @@
 ---
-- name: Install python2-shade
+- name: Install epel-release
   become: yes
-  dnf:
-    name: python2-shade
+  yum:
+    name: epel-release
+    state: present
+
+- name: Install pip
+  become: yes
+  yum:
+    name: python-pip
+    state: present
+
+- name: Install python shade
+  become: yes
+  pip:
+    name: shade
     state: present
 
 - name: Install libselinux-python
   become: yes
-  dnf:
+  yum:
     name: libselinux-python
     state: present
 

@@ -1,0 +1,26 @@
+#!/usr/bin/bash -xe
+
+ssh-keygen -R 192.168.200.11
+ssh-keygen -R 192.168.200.12
+ssh-keygen -R 192.168.200.13
+
+rm -f id_rsa
+rm -f id_rsa.pub
+ssh-keygen -f id_rsa -P ""
+
+pushd hack/kubespray
+vagrant up
+popd
+
+ssh-keyscan 192.168.200.11 >> ~/.ssh/known_hosts
+sshpass -p vagrant ssh-copy-id -i id_rsa.pub vagrant@192.168.200.11
+ssh-keyscan 192.168.200.12 >> ~/.ssh/known_hosts
+sshpass -p vagrant ssh-copy-id -i id_rsa.pub vagrant@192.168.200.12
+ssh-keyscan 192.168.200.13 >> ~/.ssh/known_hosts
+sshpass -p vagrant ssh-copy-id -i id_rsa.pub vagrant@192.168.200.13
+
+ssh -i id_rsa vagrant@192.168.200.11 "sudo cat /etc/kubernetes/admin.conf" > admin.conf
+
+./hack/deploy-ovn
+
+./hack/deploy-ovn-provider

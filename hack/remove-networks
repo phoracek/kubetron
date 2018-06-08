@@ -1,7 +1,7 @@
 #!/bin/bash -x
 
 # remove known_hosts entry
-ssh-keygen -R 192.168.122.10
+ssh-keygen -R 192.168.200.11
 
 # run ansible playbooks
 pushd hack/ansible

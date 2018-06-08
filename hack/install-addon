@@ -4,6 +4,8 @@ KUBECTL=./hack/kubectl
 ADMISSION_IMAGE=${ADMISSION_IMAGE:-phoracek/kubetron-admission:latest}
 DEVICEPLUGIN_IMAGE=${DEVICEPLUGIN_IMAGE:-phoracek/kubetron-deviceplugin:latest}
 
+# TODO: keep pair in hack/ no need to keep it safe in development environment
+
 cat <<EOF | cfssl genkey - | cfssljson -bare server
 {
   "hosts": [
@@ -38,8 +40,8 @@ $KUBECTL get csr admission.kubetron -o jsonpath='{.status.certificate}' | base64
 
 ADMISSION_CERT=$(cat server.crt | base64 -w 0)
 ADMISSION_KEY=$(cat server-key.pem | base64 -w 0)
-KUBERNETES_CA=$($KUBECTL get --namespace kube-public cm cluster-info -o yaml | grep certificate-authority-data | sed 's/.*certificate-authority-data: \(.*\)/\1/g')
-PROVIDER_URL=http://$($KUBECTL get node master -o json | jq '.status.addresses[0].address' | cut -d "\"" -f 2):9696
+KUBERNETES_CA=$(ssh -i id_rsa vagrant@192.168.200.11 "sudo cat /etc/kubernetes/ssl/ca.pem" | base64 -w 0)
+PROVIDER_URL=http://192.168.200.11:9696
 
 # batch request is not done sequentialy and sometimes it fails with "namespace does not exist",
 # therefore, create it beforehand

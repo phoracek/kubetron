@@ -40,32 +40,15 @@ Development environment provides multi-node setup of Kubernetes and
 ovirt-ovn-provider (minimal implementation of Neutron).
 
 ```shell
-# start master and nodes machines
-vagrant up
+# clone repository with its submodules
+git clone --recurse-submodules https://github.com/phoracek/kubetron
+cd kubetron
 
-# deploy kubernetes on master and two nodes
-./hack/deploy-kubernetes
-
-# check if nodes node1 and node2 were connected to master
-./hack/kubectl get nodes
-
-# deploy ovn on master (central) and nodes (host+controller)
-./hack/deploy-ovn
-
-# check if hosts are listed in southbound database
-vagrant ssh master -c 'sudo ovn-sbctl show'
-
-# deploy ovn provider on master
-./hack/deploy-ovn-provider
-
-# check that ovn provider works
-vagrant ssh master -c 'curl 127.0.0.1:9696/v2.0/networks' | jq
-
-# verify ovirt-provider-ovn
-./hack/verify-ovn-provider
+# deploy cluster with kubernetes, ovn and ovirt-provider-ovn
+./hack/deploy-cluster
 
 # remove all machines (don't if you want to go through the next step)
-vagrant destroy
+./hack/destroy-cluster
 ```
 
 ## Installation and usage
