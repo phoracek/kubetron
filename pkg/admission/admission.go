@@ -122,8 +122,9 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 	}
 	glog.V(4).Infof("[%s] Networks: %s", requestName, networks)
 
+
 	// Get map of available networks (keys) and their respective IDs (values)
-	providerNetworkIDsByNames, err := ah.providerClient.ListNetworkIDsByNames()
+	providerNetworkByName, err := ah.providerClient.ListNetworkByName()
 	if err != nil {
 		setResponseError(resp, requestName, "Failed to list provider networks: %v", err)
 		return
@@ -131,7 +132,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 
 	// Verify that all requested networks exist and are available
 	for _, network := range networks {
-		if _, ok := providerNetworkIDsByNames[network]; !ok {
+		if _, ok := providerNetworkByName[network]; !ok {
 			setResponseError(resp, requestName, "Network %s was not found", network)
 			return
 		}
@@ -143,6 +144,10 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 	// dhclientInterfaces is a list that keeps track of all assigned interfaces that will require DHCP client to obtain an IP address
 	dhclientInterfaces := make([]string, 0)
 
+	resources := map[v1.ResourceName]resource.Quantity{
+		v1.ResourceName(ah.ResourceName): resource.MustParse("1"),
+	}
+
 	// networksSpec will be later saved as the Pod's annotation, it keeps ports' details that are later used by Device Plugin to complete attachment
 	networksSpec := make(map[string]spec.NetworkSpec)
 
@@ -153,10 +158,17 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 		portName := generatePortName(network)
 
 		// Create the port on OVN NB
-		portID, hasFixedIPs, err := ah.providerClient.CreateNetworkPort(providerNetworkIDsByNames[network], portName, macAddress)
+		portID, hasFixedIPs, err := ah.providerClient.CreateNetworkPort(providerNetworkByName[network].ID, portName, macAddress)
 		if err != nil {
 			setResponseError(resp, requestName, "Error creating port: %v", err)
 			return
+		}
+
+		// TODO: if network has physnet, add it to list for resource request
+		if providerNetworkByName[network].Physnet != "" {
+			// TODO: get namespace from kubetron config
+			resources[v1.ResourceName("kubetron.network.kubevirt.io/" + providerNetworkByName[network].Physnet)] = resource.MustParse("1")
+			dhclientInterfaces = append(dhclientInterfaces, portName)
 		}
 
 		// If selected network has a subnet assigned, fixed IPs will be assigned to the port, add such interfaces to dhclientInterfaces list so we later call DHCP client on them
@@ -181,14 +193,11 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 	initializedPod.ObjectMeta.Annotations[networksSpecAnnotationName] = string(networksSpecJSON)
 
 	// Add a side-container to the Pod. This side-container will request Kubetron resource, with this request, Kubernetes scheduler will later place this Pod on a Node with Kubetron Device Plugin installed. This side-container also runs DHCP server on ports with assigned subnet
-	// TODO: configure readiness on sidecar
 	resourceContainer := v1.Container{
 		Name:  "kubetron-request-sidecart",
 		Image: "phoracek/kubetron-sidecar",
 		Resources: v1.ResourceRequirements{
-			Limits: v1.ResourceList{
-				v1.ResourceName(ah.ResourceName): resource.MustParse("1"),
-			},
+			Limits: v1.ResourceList(resources),
 		},
 		SecurityContext: &v1.SecurityContext{
 			// This side-container must be privileged in order to change Pod's IPs

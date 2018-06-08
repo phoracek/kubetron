@@ -13,6 +13,9 @@
     name: blue
   register: network_blue
 
+# TODO: create network green
+# TODO: connect network green to mgmtnet port on vlan 10
+
 - name: Create subnet for network red
   os_subnet:
     cloud: "{{ cloud_name }}"

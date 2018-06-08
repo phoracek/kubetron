@@ -1,0 +1,17 @@
+---
+- name: Create bridge that will connect OVN networks to physical interfaces
+  become: yes
+  openvswitch_bridge:
+    bridge: br10
+    state: present
+
+- name: Connect the bridge to host interface providing L2 connection
+  become: yes
+  openvswitch_port:
+    bridge: br10
+    port: eth2
+    state: present
+
+- name: Configure OVN bridge mappings, br10 exposes physical network phys-net10
+  become: yes
+  command: "ovs-vsctl set open . external_ids:ovn-bridge-mappings=phys-net10:br10"

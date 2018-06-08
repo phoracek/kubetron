@@ -1,8 +1,5 @@
 #!/bin/bash -x
 
-# remove known_hosts entry
-ssh-keygen -R 192.168.200.11
-
 # run ansible playbooks
 pushd hack/ansible
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts configure_networks.yml

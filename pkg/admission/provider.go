@@ -6,6 +6,12 @@ import (
 	resty "gopkg.in/resty.v1"
 )
 
+type Network struct {
+	Name    string
+	ID      string
+	Physnet string
+}
+
 type providerClient struct {
 	client *resty.Client
 }
@@ -20,7 +26,7 @@ func NewProviderClient(url string) *providerClient {
 }
 
 // ListNetworkIDsByNames returns a map where key is name of Neutron Network and key is its ID
-func (c *providerClient) ListNetworkIDsByNames() (map[string]string, error) {
+func (c *providerClient) ListNetworkByName() (map[string]*Network, error) {
 	var result map[string][]map[string]interface{}
 
 	// TODO: check provider error output
@@ -31,12 +37,22 @@ func (c *providerClient) ListNetworkIDsByNames() (map[string]string, error) {
 		return nil, err
 	}
 
-	networkIDsByNames := make(map[string]string)
+	networkByName := make(map[string]*Network)
 	for _, network := range result["networks"] {
-		networkIDsByNames[network["name"].(string)] = network["id"].(string)
+		var physnet string
+		if physnetRaw := network["provider:physical_network"]; physnetRaw != nil {
+			physnet = physnetRaw.(string)
+		} else {
+			physnet = ""
+		}
+		networkByName[network["name"].(string)] = &Network{
+			Name:    network["name"].(string),
+			ID:      network["id"].(string),
+			Physnet: physnet,
+		}
 	}
 
-	return networkIDsByNames, nil
+	return networkByName, nil
 }
 
 // CreateNetworkPort creates new Neutron Port on Neutron network with given ID

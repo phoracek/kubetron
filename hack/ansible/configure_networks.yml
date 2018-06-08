@@ -1,8 +1,15 @@
 ---
+- name: Configure local networks on hosts
+  hosts:
+    - node
+  gather_facts: no
+  roles:
+    - create-local-networks
+
 - name: Configure simple networking
   hosts:
     - master
   gather_facts: no
   roles:
     - prepare-os-host
-    - create-two-networks-with-subnets
+    - create-networks
