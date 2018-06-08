@@ -31,10 +31,10 @@ $vm_cpus = 1
 $shared_folders = {}
 $forwarded_ports = {}
 $subnet = "172.17.8"
-$os = "ubuntu"
-$network_plugin = "flannel"
+$os = "centos"
+$network_plugin = "calico"
 # The first three nodes are etcd servers
-$etcd_instances = $num_instances
+$etcd_instances = 1
 # The first two nodes are kube masters
 $kube_master_instances = $num_instances == 1 ? $num_instances : ($num_instances - 1)
 # All nodes are kube nodes
@@ -95,6 +95,10 @@ Vagrant.configure("2") do |config|
         config.proxy.https    = ENV['HTTPS_PROXY'] || ENV['https_proxy'] ||  ""
         config.proxy.no_proxy = $no_proxy
       end
+
+      config.vm.network :private_network, :ip => "192.168.200.1#{i}"
+      config.vm.network :private_network, :ip => "192.168.201.1#{i}"
+      config.vm.provision "shell", inline: "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config; systemctl restart sshd"
 
       if $expose_docker_tcp
         config.vm.network "forwarded_port", guest: 2375, host: ($expose_docker_tcp + i - 1), auto_correct: true
