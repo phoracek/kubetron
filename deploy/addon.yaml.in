@@ -145,6 +145,7 @@ items:
   data:
     providerURL: $PROVIDER_URL
     resourceNamespace: kubetron.network.kubevirt.io
+    reservedMainResourceName: main
     reservedOverlayResourceName: overlay
 
 - apiVersion: v1
@@ -200,6 +201,7 @@ items:
           - --tls-private-key-file=/etc/certs/key.pem
           - --provider-url=$(PROVIDER_URL)
           - --resource-namespace=$(RESOURCE_NAMESPACE)
+          - --reserved-main-resource-name=$(RESERVED_MAIN_RESOURCE_NAME)
           - --reserved-overlay-resource-name=$(RESERVED_OVERLAY_RESOURCE_NAME)
           - --audit-log-path=-
           - --audit-policy-file=/etc/config/audit.yaml
@@ -227,6 +229,11 @@ items:
               configMapKeyRef:
                 name: config
                 key: resourceNamespace
+          - name: RESERVED_MAIN_RESOURCE_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: config
+                key: reservedMainResourceName
           - name: RESERVED_OVERLAY_RESOURCE_NAME
             valueFrom:
               configMapKeyRef:
@@ -300,6 +307,7 @@ items:
           imagePullPolicy: Always
           args:
             - -resource-namespace=$(RESOURCE_NAMESPACE)
+            - -reserved-main-resource-name=$(RESERVED_MAIN_RESOURCE_NAME)
             - -reserved-overlay-resource-name=$(RESERVED_OVERLAY_RESOURCE_NAME)
             - -v=6
             - -logtostderr
@@ -311,6 +319,11 @@ items:
               configMapKeyRef:
                 name: config
                 key: resourceNamespace
+          - name: RESERCED_MAIN_RESOURCE_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: config
+                key: reservedMainResourceName
           - name: RESERCED_OVERLAY_RESOURCE_NAME
             valueFrom:
               configMapKeyRef:

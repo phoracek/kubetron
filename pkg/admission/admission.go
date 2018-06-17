@@ -35,8 +35,12 @@ const (
 type AdmissionHook struct {
 	// Full URL of OVN Manager (e.g. Neutron or oVirt OVN provider)
 	ProviderURL string
-	// Name of resource exposed by Kubetron's Device Plugin
-	ResourceName string
+	// Namespace of resources exposed by Kubetron's Device Plugin
+	ResourceNamespace string
+	// Name of the main resource exposed by Kubetron's Device Plugin
+	ReservedMainResourceName string
+	// Name of the overlay resource exposed by Kubetron's Device Plugin
+	ReservedOverlayResourceName string
 	// Kubernetes client instance
 	client *kubernetes.Clientset
 	// Client to access OVN Manager
@@ -50,6 +54,9 @@ func (ah *AdmissionHook) Initialize(kubeClientConfig *restclient.Config, stopCh 
 	}
 	if ah.ResourceNamespace == "" {
 		glog.Fatal(fmt.Errorf("Resource namespace was not set"))
+	}
+	if ah.ReservedMainResourceName == "" {
+		glog.Fatal(fmt.Errorf("Reserved main resource name was not set"))
 	}
 	if ah.ReservedOverlayResourceName == "" {
 		glog.Fatal(fmt.Errorf("Reserved overlay resource name was not set"))
@@ -125,7 +132,6 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 	}
 	glog.V(4).Infof("[%s] Networks: %s", requestName, networks)
 
-
 	// Get map of available networks (keys) and their respective IDs (values)
 	providerNetworkByName, err := ah.providerClient.ListNetworkByName()
 	if err != nil {
@@ -147,13 +153,11 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 	// dhclientInterfaces is a list that keeps track of all assigned interfaces that will require DHCP client to obtain an IP address
 	dhclientInterfaces := make([]string, 0)
 
-	// TODO: do not request it for overlay if only physnet was requested
-	resources := map[v1.ResourceName]resource.Quantity{
-		v1.ResourceName(ah.ResourceNamespace + "/" + ah.ReservedOverlayResourceName): resource.MustParse("1"),
-	}
-
 	// networksSpec will be later saved as the Pod's annotation, it keeps ports' details that are later used by Device Plugin to complete attachment
 	networksSpec := make(map[string]spec.NetworkSpec)
+
+	// requestedResources keeps track of resources (overlay/physnet) requested by user, it is later transformed into container resources request
+	requestedResources := make(map[string]int)
 
 	// Create port per each network request, such ports are only in OVN NB database, no actual interfaces are created at this point
 	// TODO: cleanup if fails
@@ -170,14 +174,22 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 
 		// TODO: if network has physnet, add it to list for resource request
 		if providerNetworkByName[network].Physnet != "" {
-			// TODO: get namespace from kubetron config
-			resources[v1.ResourceName(ah.ResourceNamespace + providerNetworkByName[network].Physnet)] = resource.MustParse("1")
+			if _, requestedResourceFound := requestedResources[providerNetworkByName[network].Physnet]; requestedResourceFound {
+				requestedResources[providerNetworkByName[network].Physnet]++
+			} else {
+				requestedResources[providerNetworkByName[network].Physnet] = 1
+			}
 			dhclientInterfaces = append(dhclientInterfaces, portName)
-		}
-
-		// If selected network has a subnet assigned, fixed IPs will be assigned to the port, add such interfaces to dhclientInterfaces list so we later call DHCP client on them
-		if hasFixedIPs {
-			dhclientInterfaces = append(dhclientInterfaces, portName)
+		} else {
+			if _, requestedResourceFound := requestedResources[providerNetworkByName[network].Physnet]; requestedResourceFound {
+				requestedResources[ah.ReservedOverlayResourceName]++
+			} else {
+				requestedResources[ah.ReservedOverlayResourceName] = 1
+			}
+			// If selected overlay network has a subnet assigned, fixed IPs will be assigned to the port, add such interfaces to dhclientInterfaces list so we later call DHCP client on them
+			if hasFixedIPs {
+				dhclientInterfaces = append(dhclientInterfaces, portName)
+			}
 		}
 
 		// NetworkSpec is later used by Device Plugin to create an interface with PortName and MacAddress and mark it with PortID on OVS so it will be mapped to already created OVN port
@@ -186,6 +198,13 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 			PortName:   portName,
 			PortID:     portID,
 		}
+	}
+
+	resources := map[v1.ResourceName]resource.Quantity{
+		v1.ResourceName(ah.ResourceNamespace + "/" + ah.ReservedMainResourceName): resource.MustParse("1"),
+	}
+	for requestedResource, quantity := range requestedResources {
+		resources[v1.ResourceName(ah.ResourceNamespace + "/" + requestedResource)] = resource.MustParse(string(quantity))
 	}
 
 	// Marshal networksSpec into JSON bytes and save it as the Pod's annotation
