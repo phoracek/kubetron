@@ -144,7 +144,8 @@ items:
     namespace: kubetron
   data:
     providerURL: $PROVIDER_URL
-    resourceName: kubetron.network.kubevirt.io/overlay
+    resourceNamespace: kubetron.network.kubevirt.io
+    reservedOverlayResourceName: overlay
 
 - apiVersion: v1
   kind: Secret
@@ -198,7 +199,8 @@ items:
           - --tls-cert-file=/etc/certs/cert.pem
           - --tls-private-key-file=/etc/certs/key.pem
           - --provider-url=$(PROVIDER_URL)
-          - --resource-name=$(RESOURCE_NAME)
+          - --resource-namespace=$(RESOURCE_NAMESPACE)
+          - --reserved-overlay-resource-name=$(RESERVED_OVERLAY_RESOURCE_NAME)
           - --audit-log-path=-
           - --audit-policy-file=/etc/config/audit.yaml
           - --v=6
@@ -220,11 +222,16 @@ items:
               configMapKeyRef:
                 name: config
                 key: providerURL
-          - name: RESOURCE_NAME
+          - name: RESOURCE_NAMESPACE
             valueFrom:
               configMapKeyRef:
                 name: config
-                key: resourceName
+                key: resourceNamespace
+          - name: RESERVED_OVERLAY_RESOURCE_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: config
+                key: reservedOverlayResourceName
           volumeMounts:
           - name: certs
             mountPath: /etc/certs
@@ -292,17 +299,23 @@ items:
           image: $DEVICEPLUGIN_IMAGE
           imagePullPolicy: Always
           args:
-            - -resource-name=$(RESOURCE_NAME)
+            - -resource-namespace=$(RESOURCE_NAMESPACE)
+            - -reserved-overlay-resource-name=$(RESERVED_OVERLAY_RESOURCE_NAME)
             - -v=6
             - -logtostderr
           securityContext:
             privileged: true
           env:
-          - name: RESOURCE_NAME
+          - name: RESOURCE_NAMESPACE
             valueFrom:
               configMapKeyRef:
                 name: config
-                key: resourceName
+                key: resourceNamespace
+          - name: RESERCED_OVERLAY_RESOURCE_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: config
+                key: reservedOverlayResourceName
           volumeMounts:
             - name: proc
               mountPath: /host/proc

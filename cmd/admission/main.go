@@ -18,8 +18,9 @@ func main() {
 
 	ah := &admission.AdmissionHook{}
 
-	flagset.StringVarP(&ah.ProviderURL, "provider-url", "p", "", "URL of OVN manager (e.g. Neutron) API server")
-	flagset.StringVarP(&ah.ResourceName, "resource-name", "r", "", "Name of resource exposed by Kubetron's Device Plugin")
+	flagset.StringVarP(&ah.ProviderURL, "provider-url", "", "", "URL of OVN manager (e.g. Neutron) API server")
+	flagset.StringVarP(&ah.ResourceNamespace, "resource-namespace", "", "", "Namespace for resources by Kubetron's Device Plugin")
+	flagset.StringVarP(&ah.ReservedOverlayResourceName, "reserved-overlay-resource-name", "", "", "Name of resource used for exposing available overlay network, cannot be used for physnet names")
 
 	logs.InitLogs()
 	defer logs.FlushLogs()

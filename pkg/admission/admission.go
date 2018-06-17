@@ -48,8 +48,11 @@ func (ah *AdmissionHook) Initialize(kubeClientConfig *restclient.Config, stopCh 
 	if ah.ProviderURL == "" {
 		glog.Fatal(fmt.Errorf("Provider URL was not set"))
 	}
-	if ah.ResourceName == "" {
-		glog.Fatal(fmt.Errorf("Resource name was not set"))
+	if ah.ResourceNamespace == "" {
+		glog.Fatal(fmt.Errorf("Resource namespace was not set"))
+	}
+	if ah.ReservedOverlayResourceName == "" {
+		glog.Fatal(fmt.Errorf("Reserved overlay resource name was not set"))
 	}
 
 	// Initialize Kubernetes client, configuration is passed from generic-admission-server
@@ -144,8 +147,9 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 	// dhclientInterfaces is a list that keeps track of all assigned interfaces that will require DHCP client to obtain an IP address
 	dhclientInterfaces := make([]string, 0)
 
+	// TODO: do not request it for overlay if only physnet was requested
 	resources := map[v1.ResourceName]resource.Quantity{
-		v1.ResourceName(ah.ResourceName): resource.MustParse("1"),
+		v1.ResourceName(ah.ResourceNamespace + "/" + ah.ReservedOverlayResourceName): resource.MustParse("1"),
 	}
 
 	// networksSpec will be later saved as the Pod's annotation, it keeps ports' details that are later used by Device Plugin to complete attachment
@@ -167,7 +171,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 		// TODO: if network has physnet, add it to list for resource request
 		if providerNetworkByName[network].Physnet != "" {
 			// TODO: get namespace from kubetron config
-			resources[v1.ResourceName("kubetron.network.kubevirt.io/" + providerNetworkByName[network].Physnet)] = resource.MustParse("1")
+			resources[v1.ResourceName(ah.ResourceNamespace + providerNetworkByName[network].Physnet)] = resource.MustParse("1")
 			dhclientInterfaces = append(dhclientInterfaces, portName)
 		}
 
