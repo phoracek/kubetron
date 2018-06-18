@@ -74,8 +74,6 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 		responses.ContainerResponses = append(responses.ContainerResponses, &response)
 	}
 
-	glog.V(4).Infof("XXX 1")
-
 	// Validate that exactly one device was requested, we are not able to handle different situation
 	if len(r.ContainerRequests) != 1 {
 		return nil, fmt.Errorf("Allocate request must contain exactly one container request")
@@ -83,8 +81,6 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 	if len(r.ContainerRequests[0].DevicesIDs) != 1 {
 		return nil, fmt.Errorf("Allocate request must contain exactly one device")
 	}
-
-	glog.V(4).Infof("XXX 2")
 
 	allocatedDeviceID := r.ContainerRequests[0].DevicesIDs[0]
 
@@ -99,16 +95,12 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 			return
 		}
 
-		glog.V(4).Infof("XXX 3 Pod UID %s", podUID)
-
 		// Obtain Pod specification from Kubernetes
 		pod, err := findPod(podUID)
 		if err != nil {
 			glog.Errorf("Failed to find pod with given PodUID: %v", err)
 			return
 		}
-
-		glog.V(4).Infof("XXX 4 Pod %s", pod)
 
 		// Parse Pod specification and obtain networksSpec details
 		networksSpec, err := buildNetworksSpec(pod)
@@ -117,12 +109,8 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 			return
 		}
 
-		glog.V(4).Infof("XXX 5 net spec %s", networksSpec)
-
 		// Containers made by Kubernetes are usually in this format: k8s_POD_$PODNAME_$PODNAMESPACE_$RANDOMSUFFIX
 		containerName := fmt.Sprintf("k8s_POD_%s_%s", pod.Name, pod.Namespace)
-
-		glog.V(4).Infof("XXX 6 container name %s", networksSpec)
 
 		// Find container PID based on its name, it will be later used to access its network namespace
 		containerPid, err := findContainerPid(containerName)
@@ -131,8 +119,6 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 			return
 		}
 
-		glog.V(4).Infof("XXX 7 container pid %s", networksSpec)
-
 		// Iterate all network requests (assigned ports), create OVS interface for each, do needed configuration and pass it to Pod network namespace
 		// TODO: run in parallel, make sure to precreate netns (colission)
 		for _, spec := range *networksSpec {
@@ -140,7 +126,6 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 				// TODO: include logs here
 				glog.Errorf("attach-pod failed, please check logs in Daemon Set /var/log/attach-pod.err.log")
 			}
-			glog.V(4).Infof("XXX 8 pod attached %s", spec)
 		}
 	}()
 
@@ -164,8 +149,11 @@ func findPodUID(deviceID string) (string, error) {
 
 	// Iterate pod-devices assignments, try to find a Pod that has allocated device in its list
 	for _, entry := range checkpoint["PodDeviceEntries"].([]interface{}) {
-		for _, deviceID := range entry.(map[string]interface{})["DeviceIDs"].([]interface{}) {
-			if deviceID.(string) == deviceID {
+		if entry.(map[string]interface{})["ResourceName"].(string) != "kubetron.network.kubevirt.io/main" { // TODO, get it from ns and reserved name
+			continue
+		}
+		for _, foundDeviceID := range entry.(map[string]interface{})["DeviceIDs"].([]interface{}) {
+			if foundDeviceID.(string) == deviceID {
 				podUID := entry.(map[string]interface{})["PodUID"].(string)
 				return podUID, nil
 			}
