@@ -21,7 +21,9 @@ EOF
 
 $KUBECTL certificate approve admission.kubetron
 
+rm -f server.crt
 until [ -s server.crt ]; do
+    sleep 1
     $KUBECTL get csr admission.kubetron -o jsonpath='{.status.certificate}' | base64 -d > server.crt
 done
 
