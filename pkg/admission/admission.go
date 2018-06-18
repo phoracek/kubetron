@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/golang/glog"
@@ -204,7 +205,7 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 		v1.ResourceName(ah.ResourceNamespace + "/" + ah.ReservedMainResourceName): resource.MustParse("1"),
 	}
 	for requestedResource, quantity := range requestedResources {
-		resources[v1.ResourceName(ah.ResourceNamespace + "/" + requestedResource)] = resource.MustParse(string(quantity))
+		resources[v1.ResourceName(ah.ResourceNamespace+"/"+requestedResource)] = resource.MustParse(strconv.Itoa(quantity))
 	}
 
 	// Marshal networksSpec into JSON bytes and save it as the Pod's annotation

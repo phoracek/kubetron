@@ -47,6 +47,8 @@ func (dp DevicePlugin) GetDevicePluginOptions(ctx context.Context, in *pluginapi
 
 // ListAndWatch returns list of devices available on the host. Since we don't work with limited physical interfaces, we report set of virtual devices that are later used to identify Pod
 func (dp DevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
+	glog.V(4).Infof("Starting list and watch")
+
 	for {
 		var devs []*pluginapi.Device
 		for i := 0; i < devicesPoolSize; i++ {
@@ -72,6 +74,8 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 		responses.ContainerResponses = append(responses.ContainerResponses, &response)
 	}
 
+	glog.V(4).Infof("XXX 1")
+
 	// Validate that exactly one device was requested, we are not able to handle different situation
 	if len(r.ContainerRequests) != 1 {
 		return nil, fmt.Errorf("Allocate request must contain exactly one container request")
@@ -79,6 +83,8 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 	if len(r.ContainerRequests[0].DevicesIDs) != 1 {
 		return nil, fmt.Errorf("Allocate request must contain exactly one device")
 	}
+
+	glog.V(4).Infof("XXX 2")
 
 	allocatedDeviceID := r.ContainerRequests[0].DevicesIDs[0]
 
@@ -93,12 +99,16 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 			return
 		}
 
+		glog.V(4).Infof("XXX 3 Pod UID %s", podUID)
+
 		// Obtain Pod specification from Kubernetes
 		pod, err := findPod(podUID)
 		if err != nil {
 			glog.Errorf("Failed to find pod with given PodUID: %v", err)
 			return
 		}
+
+		glog.V(4).Infof("XXX 4 Pod %s", pod)
 
 		// Parse Pod specification and obtain networksSpec details
 		networksSpec, err := buildNetworksSpec(pod)
@@ -107,8 +117,12 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 			return
 		}
 
+		glog.V(4).Infof("XXX 5 net spec %s", networksSpec)
+
 		// Containers made by Kubernetes are usually in this format: k8s_POD_$PODNAME_$PODNAMESPACE_$RANDOMSUFFIX
 		containerName := fmt.Sprintf("k8s_POD_%s_%s", pod.Name, pod.Namespace)
+
+		glog.V(4).Infof("XXX 6 container name %s", networksSpec)
 
 		// Find container PID based on its name, it will be later used to access its network namespace
 		containerPid, err := findContainerPid(containerName)
@@ -117,6 +131,8 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 			return
 		}
 
+		glog.V(4).Infof("XXX 7 container pid %s", networksSpec)
+
 		// Iterate all network requests (assigned ports), create OVS interface for each, do needed configuration and pass it to Pod network namespace
 		// TODO: run in parallel, make sure to precreate netns (colission)
 		for _, spec := range *networksSpec {
@@ -124,6 +140,7 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 				// TODO: include logs here
 				glog.Errorf("attach-pod failed, please check logs in Daemon Set /var/log/attach-pod.err.log")
 			}
+			glog.V(4).Infof("XXX 8 pod attached %s", spec)
 		}
 	}()
 
@@ -156,7 +173,6 @@ func findPodUID(deviceID string) (string, error) {
 	}
 
 	return "", fmt.Errorf("failed to find a pod with matching device ID")
-
 }
 
 // findPod is a helper that returns Pod object from Kubernernetes based on its UID

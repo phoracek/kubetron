@@ -30,5 +30,3 @@ ip netns exec $CONTAINERNAME ip link set $PORTNAME up
 
 # finally mark interface with its interface ID, so it is recognized by OVN
 ovs-vsctl set Interface $PORTNAME external_ids:iface-id=$PORTID
-
-# TODO: call dhcp ipam via cni
