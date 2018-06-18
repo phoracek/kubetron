@@ -21,7 +21,9 @@ EOF
 
 $KUBECTL certificate approve admission.kubetron
 
-$KUBECTL get csr admission.kubetron -o jsonpath='{.status.certificate}' | base64 -d > server.crt
+until [ -s server.crt ]; do
+    $KUBECTL get csr admission.kubetron -o jsonpath='{.status.certificate}' | base64 -d > server.crt
+done
 
 ADMISSION_CERT=$(cat server.crt | base64 -w 0)
 ADMISSION_KEY=$(cat hack/server-key.pem | base64 -w 0)
