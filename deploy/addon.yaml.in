@@ -319,12 +319,12 @@ items:
               configMapKeyRef:
                 name: config
                 key: resourceNamespace
-          - name: RESERCED_MAIN_RESOURCE_NAME
+          - name: RESERVED_MAIN_RESOURCE_NAME
             valueFrom:
               configMapKeyRef:
                 name: config
                 key: reservedMainResourceName
-          - name: RESERCED_OVERLAY_RESOURCE_NAME
+          - name: RESERVED_OVERLAY_RESOURCE_NAME
             valueFrom:
               configMapKeyRef:
                 name: config
