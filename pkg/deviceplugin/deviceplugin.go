@@ -92,6 +92,8 @@ func (dp DevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReques
 		// Wait a bit to make sure that allocated device ID will appear in checkpoint file
 		time.Sleep(10 * time.Second)
 
+		glog.V(4).Infof("XXX 2b device %s", allocatedDeviceID)
+
 		// Lookup Pod UID based on allocated device ID
 		podUID, err := findPodUID(allocatedDeviceID)
 		if err != nil {
@@ -163,11 +165,23 @@ func findPodUID(deviceID string) (string, error) {
 	}
 
 	// Iterate pod-devices assignments, try to find a Pod that has allocated device in its list
+	// TODO XXX: there is a bug!!! detailed logging needed
+	glog.V(4).Infof("YYY Finding PodUID with deviceID %s, checkpoint file: \n %s", deviceID, checkpoint)
 	for _, entry := range checkpoint["PodDeviceEntries"].([]interface{}) {
-		for _, deviceID := range entry.(map[string]interface{})["DeviceIDs"].([]interface{}) {
-			if deviceID.(string) == deviceID {
+		glog.V(4).Infof("YYY processing entry %s", entry)
+		if entry.(map[string]interface{})["ResourceName"].(string) != "kubetron.network.kubevirt.io/main" { // TODO, get it from ns and reserved name
+			glog.V(4).Infof("YYY skipping non-main resource")
+			continue
+		}
+		for _, foundDeviceID := range entry.(map[string]interface{})["DeviceIDs"].([]interface{}) {
+			glog.V(4).Infof("YYY found device ID %s", deviceID)
+			glog.V(4).Infof("YYY %s == %s = %s", deviceID)
+			if foundDeviceID.(string) == deviceID {
 				podUID := entry.(map[string]interface{})["PodUID"].(string)
+				glog.V(4).Infof("YYY deviceID matches")
 				return podUID, nil
+			} else {
+				glog.V(4).Infof("YYY deviceID did not match")
 			}
 		}
 	}
