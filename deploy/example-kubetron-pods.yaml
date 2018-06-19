@@ -6,7 +6,7 @@ items:
   metadata:
     name: example-kubetron-pod1
     annotations:
-      kubetron.network.kubevirt.io/networks: red, blue
+      kubetron.network.kubevirt.io/networks: red, blue, green
   spec:
     containers:
       - name: example-container
@@ -20,7 +20,7 @@ items:
   metadata:
     name: example-kubetron-pod2
     annotations:
-      kubetron.network.kubevirt.io/networks: red, blue
+      kubetron.network.kubevirt.io/networks: red, blue, green
   spec:
     containers:
       - name: example-container

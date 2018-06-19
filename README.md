@@ -1,12 +1,9 @@
 # Kubetron
 
-```
-kubernetes + neutron = kubetron
-```
-
 Kubetron is a Kubernetes secondary networks plugin allowing users to connect
 Pods to multiple networks created on Neutron (or other backend providing
-Neutron-like API). Currently supports only OVN implementation.
+Neutron-like API). Currently supports only OVN implementation. Both overlay
+and physical networks are supported.
 
 PRs and issues are welcome.
 
@@ -20,23 +17,17 @@ Slide deck with desired kubetron model and demo: [Google Docs](https://docs.goog
 
 ## Development environment usage
 
-Install development environment dependencies.
-
-```shell
-# install vagrant (and configure different hypervisor if needed)
-dnf install vagrant
-
-# install kubectl
-dnf install kubernetes-client
-```
-
 Development environment provides multi-node setup of Kubernetes and
 ovirt-ovn-provider (minimal implementation of Neutron).
 
 ```shell
 # clone repository with its submodules
-git clone --recurse-submodules https://github.com/phoracek/kubetron
+git clone https://github.com/phoracek/kubetron
 cd kubetron
+
+# install development environment dependencies
+dnf install vagrant ansible kubernetes-client python-pip
+pip install -r hack/kubespray/requirements.txt
 
 # deploy cluster with kubernetes, ovn and ovirt-provider-ovn
 ./hack/deploy-cluster
@@ -132,7 +123,6 @@ docker push phoracek/kubetron-sidecar:latest
 
 ## TODO
 
-- Design deck
 - Currenty communicates with Neutron API in plaintext without any auth.
   Provide security configuration.
 - If possible, communicate with OVN NB, not Neutron (or support both).

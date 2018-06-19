@@ -1,8 +1,8 @@
 #!/usr/bin/bash -xe
 
-ssh-keygen -R 192.168.200.11
-ssh-keygen -R 192.168.200.12
-ssh-keygen -R 192.168.200.13
+ssh-keygen -R 192.168.200.11 || true
+ssh-keygen -R 192.168.200.12 || true
+ssh-keygen -R 192.168.200.13 || true
 
 rm -f id_rsa
 rm -f id_rsa.pub
