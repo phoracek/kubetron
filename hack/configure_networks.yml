@@ -4,12 +4,12 @@
     - node
   gather_facts: no
   roles:
-    - create-local-networks
+    - networks/roles/create-local-networks
 
 - name: Configure simple networking
   hosts:
     - master
   gather_facts: no
   roles:
-    - prepare-os-host
-    - create-networks
+    - networks/roles/prepare-os-host
+    - networks/roles/create-networks

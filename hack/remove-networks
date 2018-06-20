@@ -1,6 +1,6 @@
 #!/bin/bash -x
 
 # run ansible playbooks
-pushd hack/ansible
+pushd hack
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts remove_networks.yml
 popd
