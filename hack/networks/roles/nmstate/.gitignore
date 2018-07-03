@@ -1,0 +1,4 @@
+/.tox/
+/.pytest_cache/
+.coverage
+tests/htmlcov-*/

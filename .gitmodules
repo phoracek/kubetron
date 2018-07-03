@@ -1,0 +1,3 @@
+[submodule "hack/roles/nmstate"]
+	path = hack/roles/nmstate
+	url = https://github.com/nmstate/ansible-nmstate

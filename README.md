@@ -22,7 +22,7 @@ ovirt-ovn-provider (minimal implementation of Neutron).
 
 ```shell
 # clone repository with its submodules
-git clone https://github.com/phoracek/kubetron
+git clone  --recurse-submodules https://github.com/phoracek/kubetron
 cd kubetron
 
 # install development environment dependencies

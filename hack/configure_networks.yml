@@ -1,4 +1,48 @@
 ---
+
+- hosts: node
+  vars:
+    - ansible_network_os: nmstate
+  tasks:
+    - name: Install epel-release
+      become: yes
+      yum:
+        name: epel-release
+        state: present
+    - name: Install git
+      become: yes
+      yum:
+        name: git
+        state: present
+    - name: Install pip
+      become: yes
+      yum:
+        name: python-pip
+        state: present
+    - name: Install python PBR
+      become: yes
+      pip:
+        name: pbr
+        state: present
+    - name: Install nmstate library
+      shell: |
+        git clone https://github.com/nmstate/nmstate
+        cd nmstate
+        pip install --upgrade .
+      args:
+        executable: /bin/bash
+      become: yes
+    - name: Configure bond using nmstate
+      become: yes
+      net_linkagg:
+        name: bond1
+        state: up
+        members:
+            - eth2
+        debug: yes
+  roles:
+    - networks/roles/nmstate
+
 - name: Configure local networks on hosts
   hosts:
     - node

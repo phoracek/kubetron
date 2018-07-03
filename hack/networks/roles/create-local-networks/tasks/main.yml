@@ -9,7 +9,7 @@
   become: yes
   openvswitch_port:
     bridge: br10
-    port: eth2
+    port: bond1
     state: present
 
 - name: Configure OVN bridge mappings, br10 exposes physical network phys-net10
