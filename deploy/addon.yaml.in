@@ -143,7 +143,9 @@ items:
     name: config
     namespace: kubetron
   data:
-    providerURL: $PROVIDER_URL
+    providerAuthURL: $PROVIDER_KEYSTONE_URL
+    providerProjectName: $PROVIDER_PROJECT_NAME
+    providerDomainName: $PROVIDER_DOMAIN_NAME
     resourceNamespace: kubetron.network.kubevirt.io
     reservedMainResourceName: main
     reservedOverlayResourceName: overlay
@@ -199,7 +201,6 @@ items:
           args:
           - --tls-cert-file=/etc/certs/cert.pem
           - --tls-private-key-file=/etc/certs/key.pem
-          - --provider-url=$(PROVIDER_URL)
           - --resource-namespace=$(RESOURCE_NAMESPACE)
           - --reserved-main-resource-name=$(RESERVED_MAIN_RESOURCE_NAME)
           - --reserved-overlay-resource-name=$(RESERVED_OVERLAY_RESOURCE_NAME)
@@ -219,11 +220,31 @@ items:
               port: 443
             initialDelaySeconds: 10
           env:
-          - name: PROVIDER_URL
+          - name: OS_AUTH_URL
             valueFrom:
               configMapKeyRef:
                 name: config
-                key: providerURL
+                key: providerAuthURL
+          - name: OS_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: provider-secret
+                key: username
+          - name: OS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: provider-secret
+                key: password
+          - name: OS_PROJECT_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: config
+                key: providerProjectName
+          - name: OS_DOMAIN_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: config
+                key: providerDomainName
           - name: RESOURCE_NAMESPACE
             valueFrom:
               configMapKeyRef:
@@ -346,3 +367,12 @@ items:
           - name: device-plugin
             hostPath:
               path: /var/lib/kubelet/device-plugins
+#Provider secrets
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: provider-secret
+    namespace: kubetron
+  data:
+    username: $PROVIDER_USERNAME
+    password: $PROVIDER_PASSWORD

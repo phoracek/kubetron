@@ -4,12 +4,14 @@ ssh -i id_rsa vagrant@192.168.200.11 "
 sudo yum install -y http://resources.ovirt.org/pub/yum-repo/ovirt-release-master.rpm ;
 sudo yum install -y ovirt-provider-ovn &&
 sudo bash -c 'cat <<EOF > /etc/ovirt-provider-ovn/conf.d/kubernetes.conf
+[PROVIDER]
+provider-host=192.168.200.11
 [SSL]
 https-enabled=false
 [OVN REMOTE]
 ovn-remote=tcp:127.0.0.1:6641
 [AUTH]
-auth-plugin=auth.plugins.static_token:NoAuthPlugin
+auth-plugin=auth.plugins.static_token:MagicTokenPlugin
 EOF' &&
 sudo systemctl restart ovirt-provider-ovn
 "
