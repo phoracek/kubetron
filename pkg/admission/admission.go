@@ -34,8 +34,6 @@ const (
 
 // AdmissionHook is implementation of generic-admission-server MutatingAdmissionHook interface
 type AdmissionHook struct {
-	// Full URL of OVN Manager (e.g. Neutron or oVirt OVN provider)
-	ProviderURL string
 	// Namespace of resources exposed by Kubetron's Device Plugin
 	ResourceNamespace string
 	// Name of the main resource exposed by Kubetron's Device Plugin
@@ -50,9 +48,6 @@ type AdmissionHook struct {
 
 // Initialize is called once when generic-addmission-server starts
 func (ah *AdmissionHook) Initialize(kubeClientConfig *restclient.Config, stopCh <-chan struct{}) error {
-	if ah.ProviderURL == "" {
-		glog.Fatal(fmt.Errorf("Provider URL was not set"))
-	}
 	if ah.ResourceNamespace == "" {
 		glog.Fatal(fmt.Errorf("Resource namespace was not set"))
 	}
@@ -71,7 +66,11 @@ func (ah *AdmissionHook) Initialize(kubeClientConfig *restclient.Config, stopCh 
 	ah.client = client
 
 	// Initialize OVN Manager client
-	ah.providerClient = NewProviderClient(ah.ProviderURL)
+	ah.providerClient, err = NewProviderClient()
+	if err != nil {
+		return fmt.Errorf("failed to initialize Provider client: %v", err)
+	}
+	glog.V(2).Infof("Provider client created")
 
 	return nil
 }

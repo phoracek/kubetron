@@ -232,6 +232,22 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/gophercloud/gophercloud"
+  packages = [
+    ".",
+    "openstack",
+    "openstack/identity/v2/tenants",
+    "openstack/identity/v2/tokens",
+    "openstack/identity/v3/tokens",
+    "openstack/networking/v2/networks",
+    "openstack/networking/v2/ports",
+    "openstack/utils",
+    "pagination"
+  ]
+  revision = "ef6628a63b53544b9c793f4c72925a1472436141"
+
+[[projects]]
+  branch = "master"
   name = "github.com/hashicorp/golang-lru"
   packages = [
     ".",
@@ -396,7 +412,6 @@
     "internal/timeseries",
     "lex/httplex",
     "proxy",
-    "publicsuffix",
     "trace",
     "websocket"
   ]
@@ -487,12 +502,6 @@
   packages = ["."]
   revision = "a96e63847dc3c67d17befa69c303767e2f84e54f"
   version = "v2.1"
-
-[[projects]]
-  name = "gopkg.in/resty.v1"
-  packages = ["."]
-  revision = "f8815663de1e64d57cdd4ee9e2b2fa96977a030e"
-  version = "v1.4"
 
 [[projects]]
   name = "gopkg.in/yaml.v2"
@@ -833,6 +842,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "e0f2f900386226d8bedc97fc2a87ed03383360380cc5d84e259d74ce7ce5772c"
+  inputs-digest = "f1af96a92894824f9bdd871c7a9c0c5f5b17361b611c8353cde944ee89bc22af"
   solver-name = "gps-cdcl"
   solver-version = 1

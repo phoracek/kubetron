@@ -7,7 +7,11 @@ DEVICEPLUGIN_IMAGE=${DEVICEPLUGIN_IMAGE:-phoracek/kubetron-deviceplugin:latest}
 ADMISSION_CERT=$(cat server.crt | base64 -w 0)
 ADMISSION_KEY=$(cat hack/server-key.pem | base64 -w 0)
 KUBERNETES_CA=$(ssh -i id_rsa vagrant@192.168.200.11 "sudo cat /etc/kubernetes/ssl/ca.pem" | base64 -w 0)
-PROVIDER_URL=http://192.168.200.11:9696
+PROVIDER_KEYSTONE_URL=http://192.168.200.11:35357/v2.0/
+PROVIDER_PROJECT_NAME=admin
+PROVIDER_DOMAIN_NAME=kubetron
+PROVIDER_USERNAME=$(echo -n "admin" | base64)
+PROVIDER_PASSWORD=$(echo -n "pass" | base64)
 
 # batch request is not done sequentialy and sometimes it fails with "namespace does not exist",
 # therefore, create it beforehand
@@ -20,5 +24,9 @@ cat deploy/addon.yaml.in | \
     sed "s/\$ADMISSION_CERT/$ADMISSION_CERT/g" | \
     sed "s/\$ADMISSION_KEY/$ADMISSION_KEY/g" | \
     sed "s/\$KUBERNETES_CA/$KUBERNETES_CA/g" | \
-    sed "s#\$PROVIDER_URL#$PROVIDER_URL#g" | \
+    sed "s#\$PROVIDER_KEYSTONE_URL#$PROVIDER_KEYSTONE_URL#g" | \
+    sed "s#\$PROVIDER_PROJECT_NAME#$PROVIDER_PROJECT_NAME#g" | \
+    sed "s#\$PROVIDER_DOMAIN_NAME#$PROVIDER_DOMAIN_NAME#g" | \
+    sed "s#\$PROVIDER_USERNAME#$PROVIDER_USERNAME#g" | \
+    sed "s#\$PROVIDER_PASSWORD#$PROVIDER_PASSWORD#g" | \
     $KUBECTL apply -f -

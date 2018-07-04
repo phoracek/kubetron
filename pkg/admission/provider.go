@@ -1,55 +1,62 @@
 // TODO: only supports plain text with no auth, add security later
-// TODO: use keystone to access Neutron API
+// TODO: check keystone expiration date 
 package admission
 
 import (
-	resty "gopkg.in/resty.v1"
+	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 )
 
 type Network struct {
-	Name    string
-	ID      string
-	Physnet string
+	Name    string `json:"name"`
+	ID      string `json:"id"`
+	Physnet string `json:"provider:physical_network"`
 }
 
 type providerClient struct {
-	client *resty.Client
+	client *gophercloud.ServiceClient
 }
 
 // NewProviderClient creates a REST client to access Neutron API
-func NewProviderClient(url string) *providerClient {
-	client := resty.
-		New().
-		SetHostURL(url).
-		SetHeader("Accept", "application/json")
-	return &providerClient{client}
+func NewProviderClient() (*providerClient, error) {
+	authOpts, err := openstack.AuthOptionsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+
+	provider, err := openstack.AuthenticatedClient(authOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := openstack.NewNetworkV2(provider, gophercloud.EndpointOpts{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &providerClient{client}, nil
 }
 
 // ListNetworkIDsByNames returns a map where key is name of Neutron Network and key is its ID
 func (c *providerClient) ListNetworkByName() (map[string]*Network, error) {
-	var result map[string][]map[string]interface{}
 
-	// TODO: check provider error output
-	_, err := c.client.R().
-		SetResult(&result).
-		Get("v2.0/networks")
+	var networkList []Network
+
+	pages, err := networks.List(c.client, networks.ListOpts{}).AllPages()
+	if err != nil {
+		return nil, err
+	}
+
+	err = networks.ExtractNetworksInto(pages, &networkList)
 	if err != nil {
 		return nil, err
 	}
 
 	networkByName := make(map[string]*Network)
-	for _, network := range result["networks"] {
-		var physnet string
-		if physnetRaw := network["provider:physical_network"]; physnetRaw != nil {
-			physnet = physnetRaw.(string)
-		} else {
-			physnet = ""
-		}
-		networkByName[network["name"].(string)] = &Network{
-			Name:    network["name"].(string),
-			ID:      network["id"].(string),
-			Physnet: physnet,
-		}
+	for index, network := range networkList {
+		networkByName[network.Name] = &networkList[index]
 	}
 
 	return networkByName, nil
@@ -57,37 +64,19 @@ func (c *providerClient) ListNetworkByName() (map[string]*Network, error) {
 
 // CreateNetworkPort creates new Neutron Port on Neutron network with given ID
 func (c *providerClient) CreateNetworkPort(network, port, macAddress string) (string, bool, error) {
-	var result map[string]map[string]interface{}
+	createOpts := ports.CreateOpts{NetworkID: network, Name: port, MACAddress: macAddress, AdminStateUp: newTrue()}
+	responsePort, err := ports.Create(c.client, createOpts).Extract()
 
-	// TODO: check provider error output
-	_, err := c.client.R().
-		SetResult(&result).
-		SetBody(
-			map[string]map[string]interface{}{
-				"port": map[string]interface{}{
-					"network_id":     network,
-					"name":           port,
-					"mac_address":    macAddress,
-					"admin_state_up": true,
-				},
-			},
-		).
-		Post("v2.0/ports")
+	if err != nil {
+		return "", false, err
+	}
 
-	// Read assigned ID of created Pod
-	portID := result["port"]["id"].(string)
-
-	// Check whether Port has fixed_ips, if it does, it means that selected Network has assigned subnet
-	hasFixedIPs := len(result["port"]["fixed_ips"].([]interface{})) != 0
-
-	return portID, hasFixedIPs, err
+	return responsePort.ID, len(responsePort.FixedIPs) != 0, err
 }
 
 // DeleteNetworkPort removes Neutron Port with given ID
 func (c *providerClient) DeleteNetworkPort(portID string) error {
-	_, err := c.client.R().
-		SetPathParams(map[string]string{"portID": portID}).
-		Delete("/v2.0/ports/{portID}")
+	err := ports.Delete(c.client, portID).ExtractErr()
 
 	return err
 }
