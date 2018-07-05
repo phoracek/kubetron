@@ -48,8 +48,15 @@ environment.
 # check if admission and deviceplugins are running and ready
 ./hack/kubectl get ds --namespace kubetron
 
+# prepare bridges for physical network green on nodes
+./hack/create-physical-networks
+
+# create overlay networks red and blue and physical network green using 
+./hack/kubectl create -f deploy/example-kubetron-networks.yaml
+
+# if you prefer to create networks directly on neutron, it can be done using an ansible playbook
 # create two networks on neutron, red and blue, both of them have a subnet assigned
-./hack/create-networks
+#./hack/create-networks
 
 # create two pods requesting networks red and blue
 ./hack/kubectl create -f deploy/example-kubetron-pods.yaml

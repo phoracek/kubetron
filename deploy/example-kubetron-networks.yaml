@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: List
+items:
+- kind: Network
+  apiVersion: v1
+  metadata:
+    name: red
+    annotations:
+      kubetron.network.kubevirt.io/networkSpec: '
+        {
+	  "name": "red",
+	  "subnets": [
+	    {
+	      "ipVersion": 4,
+	      "cidr": "10.1.0.0/24",
+	      "gatewayIP": "10.1.0.1",
+	      "enableDHCP": true,
+	      "dnsNameservers": [
+	        "8.8.8.8"
+              ]
+	    }
+          ]
+      '
+- kind: Network
+  apiVersion: v1
+  metadata:
+    name: blue
+    annotations:
+      kubetron.network.kubevirt.io/networkSpec: '
+        {
+	  "name": "blue",
+	  "subnets": [
+	    {
+	      "ipVersion": 4,
+	      "cidr": "10.2.0.0/24",
+	      "gatewayIP": "10.2.0.1",
+	      "enableDHCP": true,
+	      "dnsNameservers": [
+	        "8.8.8.8"
+              ]
+	    }
+          ]
+        }
+      '
+- kind: Network
+  apiVersion: v1
+  metadata:
+    name: green
+    annotations:
+      kubetron.network.kubevirt.io/networkSpec: '
+        {
+	  "name": "green",
+	  "provider": {
+	    "name": "phys-net10",
+	    "type": "vlan",
+	    "segmentationID": 100
+          }
+        }
+      '
