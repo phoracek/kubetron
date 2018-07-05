@@ -10,13 +10,13 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/util/logs"
 
-	"github.com/phoracek/kubetron/pkg/admission"
+	podAdmission "github.com/phoracek/kubetron/pkg/pod-admission"
 )
 
 func main() {
-	flagset := pflag.NewFlagSet("kubetron-admission", pflag.ExitOnError)
+	flagset := pflag.NewFlagSet("kubetron-pod-admission", pflag.ExitOnError)
 
-	ah := &admission.AdmissionHook{}
+	ah := &podAdmission.AdmissionHook{}
 
 	flagset.StringVarP(&ah.ProviderURL, "provider-url", "", "", "URL of OVN manager (e.g. Neutron) API server")
 	flagset.StringVarP(&ah.ResourceNamespace, "resource-namespace", "", "", "Namespace for resources by Kubetron's Device Plugin")
@@ -29,8 +29,8 @@ func main() {
 	stopCh := genericapiserver.SetupSignalHandler()
 
 	cmd := server.NewCommandStartAdmissionServer(os.Stdout, os.Stderr, stopCh, ah)
-	cmd.Short = "Launch Kubetron Admission Server"
-	cmd.Long = "Launch Kubetron Admission Server"
+	cmd.Short = "Launch Kubetron Pod Admission Server"
+	cmd.Long = "Launch Kubetron Pod Admission Server"
 
 	// Add admission hook flags
 	cmd.PersistentFlags().AddFlagSet(flagset)

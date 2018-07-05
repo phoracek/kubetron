@@ -1,6 +1,6 @@
 // TODO: only supports plain text with no auth, add security later
 // TODO: use keystone to access Neutron API
-package admission
+package podAdmission
 
 import (
 	resty "gopkg.in/resty.v1"

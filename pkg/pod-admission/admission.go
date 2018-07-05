@@ -1,5 +1,5 @@
 // TODO: expose env vars with KUBETRON_NETWORK_NAME="interface_name" to containers
-package admission
+package podAdmission
 
 import (
 	"encoding/json"
@@ -24,7 +24,7 @@ import (
 const (
 	// This annotation is used by user to request list of networks delimited by comma
 	networksAnnotationName = "kubetron.network.kubevirt.io/networks"
-	// This annotation is populated by Admission Controller and contains information later used by Device Plugin
+	// This annotation is populated by Pod Admission Controller and contains information later used by Device Plugin
 	networksSpecAnnotationName = "kubetron.network.kubevirt.io/networksSpec"
 	// Used not to overwrite last patch created by Kubernetes
 	lastAppliedConfigPath = "/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration"
@@ -81,9 +81,9 @@ func (ah *AdmissionHook) MutatingResource() (schema.GroupVersionResource, string
 	return schema.GroupVersionResource{
 			Group:    "kubetron.network.kubevirt.io",
 			Version:  "v1alpha1",
-			Resource: "admission",
+			Resource: "pod-admission",
 		},
-		"Admission"
+		"PodAdmission"
 }
 
 // Admit is called per each API request touching selected resources. Resource selector is defined in MutatingWebhookConfiguration as a part of Kubetron manifest and handles only Pods
