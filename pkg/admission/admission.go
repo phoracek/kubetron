@@ -13,7 +13,7 @@ import (
 	"github.com/mattbaird/jsonpatch"
 	"github.com/phoracek/kubetron/pkg/spec"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -286,15 +286,37 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(requestName string, req 
 	}
 	glog.V(4).Infof("[%s] Network spec: %s", requestName, networksSpecAnnotation)
 
+	// No need to delete ports if the spec is already empty
+	if len(networksSpec) == 0 {
+		glog.V(2).Infof("[%s] Skipping: Nothing to delete.", requestName)
+		resp.Allowed = true
+		return
+	}
 	// Remove assigned Pod's LSPs from OVN
-	for _, spec := range networksSpec {
+	for network, spec := range networksSpec {
 		err := ah.providerClient.DeleteNetworkPort(spec.PortID)
 		if err != nil {
-			setResponseError(resp, requestName, "Error creating port: %v", err)
+			setResponseError(resp, requestName, "Error removing port: %v", err)
 			return
 		}
+		delete(networksSpec, network)
 	}
-	glog.V(2).Infof("[%s] Successfully created ports", requestName)
+	glog.V(2).Infof("[%s] Successfully removed all ports", requestName)
+
+	// Remove deleted ports from Pod annotations
+	jsonNetworkSpecs, err := json.Marshal(networksSpec)
+	if err != nil {
+		setResponseError(resp, requestName, "Failed to marshal networksSpec: %v", err)
+		return
+	}
+
+	pod.ObjectMeta.Annotations[networksSpecAnnotationName] = string(jsonNetworkSpecs)
+	_, err = ah.client.CoreV1().Pods(req.Namespace).Update(pod)
+	if err != nil {
+		setResponseError(resp, requestName, "Cannot update pod: %v", err)
+		return
+	}
+
 
 	resp.Allowed = true
 }
