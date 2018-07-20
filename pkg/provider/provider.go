@@ -1,6 +1,6 @@
 // TODO: only supports plain text with no auth, add security later
 // TODO: use keystone to access Neutron API
-package admission
+package provider
 
 import (
 	resty "gopkg.in/resty.v1"
@@ -12,21 +12,21 @@ type Network struct {
 	Physnet string
 }
 
-type providerClient struct {
+type ProviderClient struct {
 	client *resty.Client
 }
 
 // NewProviderClient creates a REST client to access Neutron API
-func NewProviderClient(url string) *providerClient {
+func NewProviderClient(url string) *ProviderClient {
 	client := resty.
 		New().
 		SetHostURL(url).
 		SetHeader("Accept", "application/json")
-	return &providerClient{client}
+	return &ProviderClient{client}
 }
 
 // ListNetworkIDsByNames returns a map where key is name of Neutron Network and key is its ID
-func (c *providerClient) ListNetworkByName() (map[string]*Network, error) {
+func (c *ProviderClient) ListNetworkByName() (map[string]*Network, error) {
 	var result map[string][]map[string]interface{}
 
 	// TODO: check provider error output
@@ -56,7 +56,7 @@ func (c *providerClient) ListNetworkByName() (map[string]*Network, error) {
 }
 
 // CreateNetworkPort creates new Neutron Port on Neutron network with given ID
-func (c *providerClient) CreateNetworkPort(network, port, macAddress string) (string, bool, error) {
+func (c *ProviderClient) CreateNetworkPort(network, port, macAddress string) (string, bool, error) {
 	var result map[string]map[string]interface{}
 
 	// TODO: check provider error output
@@ -84,7 +84,7 @@ func (c *providerClient) CreateNetworkPort(network, port, macAddress string) (st
 }
 
 // DeleteNetworkPort removes Neutron Port with given ID
-func (c *providerClient) DeleteNetworkPort(portID string) error {
+func (c *ProviderClient) DeleteNetworkPort(portID string) error {
 	_, err := c.client.R().
 		SetPathParams(map[string]string{"portID": portID}).
 		Delete("/v2.0/ports/{portID}")

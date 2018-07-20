@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/mattbaird/jsonpatch"
+	"github.com/phoracek/kubetron/pkg/provider"
 	"github.com/phoracek/kubetron/pkg/spec"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	"k8s.io/api/core/v1"
@@ -45,7 +46,7 @@ type AdmissionHook struct {
 	// Kubernetes client instance
 	client *kubernetes.Clientset
 	// Client to access OVN Manager
-	providerClient *providerClient
+	providerClient *provider.ProviderClient
 }
 
 // Initialize is called once when generic-addmission-server starts
@@ -71,7 +72,7 @@ func (ah *AdmissionHook) Initialize(kubeClientConfig *restclient.Config, stopCh 
 	ah.client = client
 
 	// Initialize OVN Manager client
-	ah.providerClient = NewProviderClient(ah.ProviderURL)
+	ah.providerClient = provider.NewProviderClient(ah.ProviderURL)
 
 	return nil
 }
