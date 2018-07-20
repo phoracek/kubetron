@@ -83,7 +83,7 @@ func (ah *AdmissionHook) MutatingResource() (schema.GroupVersionResource, string
 			Version:  "v1alpha1",
 			Resource: "admission",
 		},
-		"Admission"
+		"PodAdmission"
 }
 
 // Admit is called per each API request touching selected resources. Resource selector is defined in MutatingWebhookConfiguration as a part of Kubetron manifest and handles only Pods
@@ -316,7 +316,6 @@ func (ah *AdmissionHook) handleAdmissionRequestToDelete(requestName string, req 
 		setResponseError(resp, requestName, "Cannot update pod: %v", err)
 		return
 	}
-
 
 	resp.Allowed = true
 }

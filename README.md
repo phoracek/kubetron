@@ -102,15 +102,15 @@ dep ensure
 # don't refresh, just download dependencies
 dep ensure --vendor-only
 
-# build admission binary locally
-CGO_ENABLED=0 GOOS=linux go build cmd/admission/main.go
+# build pod admission binary locally
+CGO_ENABLED=0 GOOS=linux go build cmd/pod-admission/main.go
 
 # build deviceplugin binary locally
 CGO_ENABLED=0 GOOS=linux go build cmd/deviceplugin/main.go
 
-# build and push admission image
-docker build -f cmd/admission/Dockerfile -t phoracek/kubetron-admission:latest .
-docker push phoracek/kubetron-admission:latest
+# build and push pod admission image
+docker build -f cmd/pod-admission/Dockerfile -t phoracek/kubetron-pod-admission:latest .
+docker push phoracek/kubetron-pod-admission:latest
 
 # build and push deviceplugin image
 docker build -f cmd/deviceplugin/Dockerfile -t phoracek/kubetron-deviceplugin:latest .

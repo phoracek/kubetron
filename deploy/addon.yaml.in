@@ -161,40 +161,40 @@ items:
 - apiVersion: v1
   kind: Service
   metadata:
-    name: admission
+    name: pod-admission
     namespace: kubetron
     labels:
-      app: admission
+      app: pod-admission
   spec:
     ports:
     - name: https-webhook
       port: 443
     selector:
-      app: admission
+      app: pod-admission
 
 - apiVersion: apps/v1
   kind: DaemonSet
   metadata:
-    name: admission
+    name: pod-admission
     namespace: kubetron
     labels:
-      app: admission
+      app: pod-admission
   spec:
     selector:
       matchLabels:
-        app: admission
+        app: pod-admission
     updateStrategy:
       type: RollingUpdate
     template:
       metadata:
-        name: admission
+        name: pod-admission
         labels:
-          app: admission
+          app: pod-admission
       spec:
         serviceAccountName: kubetron
         containers:
-        - name: admission
-          image: $ADMISSION_IMAGE
+        - name: pod-admission
+          image: $POD_ADMISSION_IMAGE
           imagePullPolicy: Always
           args:
           - --tls-cert-file=/etc/certs/cert.pem
@@ -268,9 +268,9 @@ items:
   - name: kubetron.network.kubevirt.io
     clientConfig:
       service:
-        name: admission
+        name: pod-admission
         namespace: kubetron
-        path: /apis/kubetron.network.kubevirt.io/v1alpha1/admission
+        path: /apis/kubetron.network.kubevirt.io/v1alpha1/pod-admission
       caBundle: $KUBERNETES_CA
     rules:
       - operations: ["CREATE", "DELETE"]
