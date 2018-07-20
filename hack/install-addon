@@ -1,7 +1,8 @@
 #!/bin/bash -xe
 
 KUBECTL=./hack/kubectl
-ADMISSION_IMAGE=${ADMISSION_IMAGE:-phoracek/kubetron-admission:latest}
+POD_ADMISSION_IMAGE=${POD_ADMISSION_IMAGE:-phoracek/kubetron-pod-admission:latest}
+NETWORK_ADMISSION_IMAGE=${NETWORK_ADMISSION_IMAGE:-phoracek/kubetron-network-admission:latest}
 DEVICEPLUGIN_IMAGE=${DEVICEPLUGIN_IMAGE:-phoracek/kubetron-deviceplugin:latest}
 
 cat <<EOF | $KUBECTL create -f -
@@ -38,7 +39,8 @@ $KUBECTL create --save-config namespace kubetron
 sleep 2
 
 cat deploy/addon.yaml.in | \
-    sed "s#\$ADMISSION_IMAGE#$ADMISSION_IMAGE#g" | \
+    sed "s#\$POD_ADMISSION_IMAGE#$POD_ADMISSION_IMAGE#g" | \
+    sed "s#\$NETWORK_ADMISSION_IMAGE#$NETWORK_ADMISSION_IMAGE#g" | \
     sed "s#\$DEVICEPLUGIN_IMAGE#$DEVICEPLUGIN_IMAGE#g" | \
     sed "s/\$ADMISSION_CERT/$ADMISSION_CERT/g" | \
     sed "s/\$ADMISSION_KEY/$ADMISSION_KEY/g" | \
