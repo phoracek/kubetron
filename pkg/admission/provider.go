@@ -15,6 +15,12 @@ type Network struct {
 	Physnet string `json:"provider:physical_network"`
 }
 
+type PortParams struct {
+	PortId      string
+	MacAddress  string
+	HasFixedIps bool
+}
+
 type providerClient struct {
 	client *gophercloud.ServiceClient
 }
@@ -63,15 +69,19 @@ func (c *providerClient) ListNetworkByName() (map[string]*Network, error) {
 }
 
 // CreateNetworkPort creates new Neutron Port on Neutron network with given ID
-func (c *providerClient) CreateNetworkPort(network, port, macAddress string) (string, bool, error) {
-	createOpts := ports.CreateOpts{NetworkID: network, Name: port, MACAddress: macAddress, AdminStateUp: newTrue()}
+func (c *providerClient) CreateNetworkPort(network, port string) (*PortParams, error) {
+	createOpts := ports.CreateOpts{NetworkID: network, Name: port, AdminStateUp: newTrue()}
 	responsePort, err := ports.Create(c.client, createOpts).Extract()
 
 	if err != nil {
-		return "", false, err
+		return nil, err
 	}
-
-	return responsePort.ID, len(responsePort.FixedIPs) != 0, err
+	portParams := PortParams{
+		PortId:      responsePort.ID,
+		MacAddress:  responsePort.MACAddress,
+		HasFixedIps: len(responsePort.FixedIPs) != 0,
+	}
+	return &portParams, nil
 }
 
 // DeleteNetworkPort removes Neutron Port with given ID
