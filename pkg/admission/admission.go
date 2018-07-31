@@ -162,11 +162,10 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 	// Create port per each network request, such ports are only in OVN NB database, no actual interfaces are created at this point
 	// TODO: cleanup if fails
 	for _, network := range networks {
-		macAddress := generateRandomMac()
 		portName := generatePortName(network)
 
 		// Create the port on OVN NB
-		portID, hasFixedIPs, err := ah.providerClient.CreateNetworkPort(providerNetworkByName[network].ID, portName, macAddress)
+		portParams, err := ah.providerClient.CreateNetworkPort(providerNetworkByName[network].ID, portName)
 		if err != nil {
 			setResponseError(resp, requestName, "Error creating port: %v", err)
 			return
@@ -187,16 +186,16 @@ func (ah *AdmissionHook) handleAdmissionRequestToCreate(requestName string, req 
 				requestedResources[ah.ReservedOverlayResourceName] = 1
 			}
 			// If selected overlay network has a subnet assigned, fixed IPs will be assigned to the port, add such interfaces to dhclientInterfaces list so we later call DHCP client on them
-			if hasFixedIPs {
+			if portParams.HasFixedIps {
 				dhclientInterfaces = append(dhclientInterfaces, portName)
 			}
 		}
 
 		// NetworkSpec is later used by Device Plugin to create an interface with PortName and MacAddress and mark it with PortID on OVS so it will be mapped to already created OVN port
 		networksSpec[network] = spec.NetworkSpec{
-			MacAddress: macAddress,
+			MacAddress: portParams.MacAddress,
 			PortName:   portName,
-			PortID:     portID,
+			PortID:     portParams.PortId,
 		}
 	}
 
@@ -359,17 +358,6 @@ func setResponseError(resp *admissionv1beta1.AdmissionResponse, requestName stri
 		Status: metav1.StatusFailure, Code: http.StatusInternalServerError, Reason: metav1.StatusReasonInternalError,
 		Message: fmt.Sprintf(message, args...),
 	}
-}
-
-// generateRandomMac returns random local unicast MAC address
-func generateRandomMac() string {
-	buf := make([]byte, 6)
-	_, err := rand.Read(buf)
-	if err != nil {
-		panic(err)
-	}
-	buf[0] = (buf[0] | 2) & 0xfe // make the address local and unicast
-	return fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5])
 }
 
 // generatePortName builds name of a port in format ${NETWORK_NAME}-${RANDOM_SUFFIX}, length of the name is set to 15 characters so it fits max length of an interface name
